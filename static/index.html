@@ -22,12 +22,7 @@
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="schedule">Schedule</button>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="input">Input Score</button>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="standings">Standings</button>
-    <div class="tabs-season">
-      <label for="year" class="tabs-season-label">Season</label>
-      <select id="year" name="year" class="tabs-season-select" aria-label="Season">
-        <option value="2025">2025-2026</option>
-      </select>
-    </div>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="fame">Wall of Fame</button>
   </nav>
 
   <main class="main">
@@ -53,9 +48,16 @@
     <section id="panel-schedule" class="panel" role="tabpanel" aria-labelledby="tab-schedule" hidden>
       <div class="content-card content-card--schedule">
         <h2>Schedule</h2>
+        <div class="section-season">
+          <label for="year-schedule" class="section-season-label">Season</label>
+          <select id="year-schedule" name="year-schedule" class="section-season-select" aria-label="Season for schedule">
+            <option value="2025">2025-2026</option>
+          </select>
+        </div>
         <div class="schedule-tabs">
-          <button type="button" class="schedule-tab active" data-schedule-level="open">Open</button>
-          <button type="button" class="schedule-tab" data-schedule-level="main">Main</button>
+          <button type="button" class="schedule-tab active" data-schedule-level="open">Open Handicap</button>
+          <button type="button" class="schedule-tab" data-schedule-level="main">Main Handicap</button>
+          <button type="button" class="schedule-tab" data-schedule-level="box">Box league</button>
         </div>
         <div class="schedule-wrapper">
           <div id="schedule-panel-open" class="schedule-panel active">
@@ -102,6 +104,40 @@
             </div>
             <p id="empty-schedule-main" class="empty-state" hidden>No schedule entries yet for Main.</p>
           </div>
+          <div id="schedule-panel-box" class="schedule-panel" hidden>
+            <div class="box-league">
+              <div class="box-tabs" aria-label="Box league tabs">
+                <button type="button" class="box-tab active" data-box-team="Foo Fighters">Foo Fighters</button>
+                <button type="button" class="box-tab" data-box-team="Pink Floyd">Pink Floyd</button>
+                <button type="button" class="box-tab" data-box-team="Dire Straits">Dire Straits</button>
+                <button type="button" class="box-tab" data-box-team="Metallica">Metallica</button>
+                <button type="button" class="box-tab" data-box-team="Nirvana">Nirvana</button>
+                <button type="button" class="box-tab" data-box-team="Fleetwood Mac">Fleetwood Mac</button>
+                <button type="button" class="box-tab" data-box-team="Guns N' Roses">Guns N' Roses</button>
+                <button type="button" class="box-tab" data-box-team="Pearl Jam">Pearl Jam</button>
+                <button type="button" class="box-tab" data-box-team="Deep Purple">Deep Purple</button>
+              </div>
+              <div class="table-scroll">
+                <table class="schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Matchup</th>
+                      <th>Dates</th>
+                      <th>Team 1</th>
+                      <th>Team 2</th>
+                      <th class="box-player-header" data-letter="A">A</th>
+                      <th class="box-player-header" data-letter="B">B</th>
+                      <th class="box-player-header" data-letter="C">C</th>
+                      <th class="box-player-header" data-letter="D">D</th>
+                      <th class="box-player-header" data-letter="E">E</th>
+                      <th class="box-player-header" data-letter="F">F</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schedule-tbody-box"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -109,6 +145,12 @@
     <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" hidden>
       <div class="content-card form-card">
         <h2>Input Score</h2>
+        <div class="section-season">
+          <label for="year-input" class="section-season-label">Season</label>
+          <select id="year-input" name="year-input" class="section-season-select" aria-label="Season for input scores">
+            <option value="2025">2025-2026</option>
+          </select>
+        </div>
         <form id="score-form" class="score-form">
           <div class="form-row">
             <label for="league">League</label>
@@ -192,10 +234,17 @@
     <section id="panel-standings" class="panel" role="tabpanel" aria-labelledby="tab-standings" hidden>
       <div class="content-card">
         <h2>Standings</h2>
+        <div class="section-season">
+          <label for="year-standings" class="section-season-label">Season</label>
+          <select id="year-standings" name="year-standings" class="section-season-select" aria-label="Season for standings">
+            <option value="2025">2025-2026</option>
+          </select>
+        </div>
         <p class="standings-intro">Scoring: 1 point for playing, 1 point for winning the match, and 1 point per game won. Listed alphabetically by team.</p>
         <div class="standings-tabs">
-          <button type="button" class="standings-tab active" data-standings="handicap-open">Handicap Open</button>
-          <button type="button" class="standings-tab" data-standings="handicap-main">Handicap Main</button>
+          <button type="button" class="standings-tab active" data-standings="handicap-open">Open Handicap</button>
+          <button type="button" class="standings-tab" data-standings="handicap-main">Main Handicap</button>
+          <button type="button" class="standings-tab" data-standings="box">Box league</button>
         </div>
         <div id="standings-handicap-open" class="standings-panel active">
           <table class="standings-table">
@@ -227,6 +276,61 @@
             <tbody id="tbody-handicap-main"></tbody>
           </table>
         </div>
+        <div id="standings-box" class="standings-panel" hidden>
+          <div class="box-league">
+            <div class="box-tabs standings-box-tabs" aria-label="Box league standings tabs">
+              <button type="button" class="box-tab active" data-standings-box="Foo Fighters">Foo Fighters</button>
+              <button type="button" class="box-tab" data-standings-box="Pink Floyd">Pink Floyd</button>
+              <button type="button" class="box-tab" data-standings-box="Dire Straits">Dire Straits</button>
+              <button type="button" class="box-tab" data-standings-box="Metallica">Metallica</button>
+              <button type="button" class="box-tab" data-standings-box="Nirvana">Nirvana</button>
+              <button type="button" class="box-tab" data-standings-box="Fleetwood Mac">Fleetwood Mac</button>
+              <button type="button" class="box-tab" data-standings-box="Guns N' Roses">Guns N' Roses</button>
+              <button type="button" class="box-tab" data-standings-box="Pearl Jam">Pearl Jam</button>
+              <button type="button" class="box-tab" data-standings-box="Deep Purple">Deep Purple</button>
+            </div>
+            <table class="standings-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Player</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-standings-box"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-fame" class="panel" role="tabpanel" aria-labelledby="tab-fame" hidden>
+      <div class="content-card content-card--fame">
+        <h2>Handicap Winners 2025</h2>
+
+        <section class="fame-section">
+          <h3>Main Division Winners and Runners Up</h3>
+          <figure class="fame-figure">
+            <img src="main_division_handicap_2025.JPG" alt="Main Division Handicap 2025" class="fame-img" />
+            <figcaption class="fame-caption">From left to right: Matt Rho, Marcy Kaplan, Heidi Stevenson, Jack Hager, Nick Farrell</figcaption>
+          </figure>
+          <div class="fame-teams">
+            <p><strong>Winners — The Drop Shots:</strong> Heidi Stevenson, Jon Delafosse, Jack Hager, Nick Farrell</p>
+            <p><strong>Runners up — Squash Aces:</strong> Bob Reynolds, Matt Rho, BT Thornton, Marcy Kaplan</p>
+          </div>
+        </section>
+
+        <section class="fame-section">
+          <h3>Open Division Winners and Runners Up</h3>
+          <figure class="fame-figure">
+            <img src="open_division_handicap_2025.JPG" alt="Open Division Handicap 2025" class="fame-img" />
+            <figcaption class="fame-caption">From left to right: Jimmy Cooke, Spencer Williamson, Mark Davis, Shelton Horsley, Sanjay Hinduja, Rick Morris</figcaption>
+          </figure>
+          <div class="fame-teams">
+            <p><strong>Winners — Killer B's:</strong> Jim Bonbright, Shelton Horsley, Sanjay Hinduja, Rick Morris</p>
+            <p><strong>Runners up — Team Lightning:</strong> Mark Davis, Rand Robins, Jimmy Cooke, Spencer Williamson</p>
+          </div>
+        </section>
       </div>
     </section>
   </main>

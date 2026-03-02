@@ -4,10 +4,11 @@ Stores scores in SQLite and serves standings for handicap open/main.
 """
 import os
 import sqlite3
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
 
 cors_origins = os.environ.get("RCD_CORS_ORIGINS", "*").strip()
@@ -90,7 +91,8 @@ WEEK_DATE_RANGES = {
     7: "Mar 1–Mar 7",
 }
 
-SEASON_YEARS = [2024, 2025, 2026]
+# Single active season; exposed via /api/years
+SEASON_YEARS = [2025]
 
 
 def get_db():
@@ -200,6 +202,18 @@ def points_for_team(games_won: int, is_winner: bool) -> int:
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
+
+
+@app.route("/main_division_handicap_2025.JPG")
+def main_division_image():
+    path = os.path.join(STATIC_DIR, "main_division_handicap_2025.JPG")
+    return send_file(path, mimetype="image/jpeg")
+
+
+@app.route("/open_division_handicap_2025.JPG")
+def open_division_image():
+    path = os.path.join(STATIC_DIR, "open_division_handicap_2025.JPG")
+    return send_file(path, mimetype="image/jpeg")
 
 
 @app.route("/api/players")

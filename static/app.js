@@ -40,6 +40,259 @@
 
   const TEAMS_EXCLUDED = new Set(["A", "B"]);
 
+  // Box league player names per sheet (A–F columns in each tab).
+  const BOX_PLAYERS = {
+    "Foo Fighters": {
+      A: "Mark Davis",
+      B: "Josh Wishnack",
+      C: "Scott Harrison",
+      D: "John Street",
+      E: "Rob Long",
+      F: "Robert Angle",
+    },
+    "Pink Floyd": {
+      A: "Sanjay Hinduja",
+      B: "Ros Bowers",
+      C: "Tommy Richards",
+      D: "Shelton Horsley",
+      E: "Grant Stevens",
+      F: "Jon Rasich",
+    },
+    "Dire Straits": {
+      A: "Jimmy Meadows",
+      B: "Jim Bonbright",
+      C: "Spencer Williamson",
+      D: "Teddy Damgard",
+      E: "Jack Hager",
+      F: "Alan Burke",
+    },
+    Metallica: {
+      A: "Jim Maxwell",
+      B: "Alan Stone",
+      C: "Moses Maxfield",
+      D: "Robert Gentil",
+      E: "Nick Farrell",
+      F: "Deesh Bhattal",
+    },
+    Nirvana: {
+      A: "Matt Rho",
+      B: "Tom Mitchell",
+      C: "Billy Miller",
+      D: "Mukul Paithane",
+      E: "Austin Brockenbough",
+      F: "Peter Thacker",
+    },
+    "Fleetwood Mac": {
+      A: "Bob Reynolds",
+      B: "BT Thornton",
+      C: "Nitin Sethi",
+      D: "Heidi Stevenson",
+      E: "Skylyr Phillips",
+      F: "Trey Packard",
+    },
+    "Guns N' Roses": {
+      A: "Jimmy Cooke",
+      B: "Frank Devenoge",
+      C: "Dave Shepardson",
+      D: "Dean King",
+      E: "Matt Chriss",
+      F: "Berkeley Edmunds",
+    },
+    "Pearl Jam": {
+      A: "Andy Mack",
+      B: "Eddie O'Leary",
+      C: "Jim Davis",
+      D: "Monty Geho",
+      E: "Charles Kempe",
+      F: "Manoli Loupassi",
+    },
+    "Deep Purple": {
+      A: "George Stephenson",
+      B: "Rand Robins",
+      C: "Michael Jarvis",
+      D: "Jeff Clarke",
+      E: "Michael Halloran",
+      F: "Ned Sinnott",
+    },
+  };
+
+  // Full 15 matchups from the Schedule tab (all boxes follow this order).
+  const FULL_BOX_MATCHUPS = [
+    { matchup: "A & D vs B & C", dates: "Nov 2–8" },
+    { matchup: "A & F vs D & E", dates: "Nov 9–15" },
+    { matchup: "B & E vs C & F", dates: "Nov 16–29" },
+    { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6" },
+    { matchup: "B & E vs C & D", dates: "Dec 7–13" },
+    { matchup: "A & C vs D & F", dates: "Dec 14–27" },
+    { matchup: "A & E vs B & F", dates: "Dec 28–Jan 3" },
+    { matchup: "A & B vs C & E", dates: "Jan 4–10" },
+    { matchup: "B & D vs C & F", dates: "Jan 11–17" },
+    { matchup: "A & E vs C & F", dates: "Jan 18–24" },
+    { matchup: "A & C vs B & D", dates: "Jan 25–31" },
+    { matchup: "B & D vs E & F", dates: "Feb 1–7" },
+    { matchup: "A & D vs C & E", dates: "Feb 8–14" },
+    { matchup: "A & F vs B & E", dates: "Feb 15–21" },
+    { matchup: "C & E vs D & F", dates: "Feb 22–28" },
+  ];
+
+  // Parse "X & Y vs Z & W" -> { team1: [X,Y], team2: [Z,W] }
+  function parseMatchup(matchup) {
+    const m = matchup.match(/^([A-F]) & ([A-F]) vs ([A-F]) & ([A-F])$/);
+    if (!m) return { team1: [], team2: [] };
+    return { team1: [m[1], m[2]], team2: [m[3], m[4]] };
+  }
+
+  // Derive per-player scores from matchup and team totals. Sitting players get "X".
+  function getPlayerScoresForMatchup(matchup, team1, team2) {
+    const { team1: t1, team2: t2 } = parseMatchup(matchup);
+    const scores = { A: "X", B: "X", C: "X", D: "X", E: "X", F: "X" };
+    const t1Val = team1 != null && team1 !== "" ? Number(team1) : null;
+    const t2Val = team2 != null && team2 !== "" ? Number(team2) : null;
+    t1.forEach((p) => { scores[p] = t1Val != null ? t1Val : ""; });
+    t2.forEach((p) => { scores[p] = t2Val != null ? t2Val : ""; });
+    return scores;
+  }
+
+  // Box league schedules per team, from the Google Sheets tabs.
+  // Each entry: { matchup, dates, team1, team2 } where team1/team2 are game totals.
+  const BOX_SCHEDULES = {
+    "Foo Fighters": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 3, team2: 1 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 3, team2: 1 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 3, team2: 0 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 3, team2: 0 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 2, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 1 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 3, team2: 2 },
+    ],
+    "Pink Floyd": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 3, team2: 1 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 3, team2: 1 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 3, team2: 0 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 3, team2: 0 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 2, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 1 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 3, team2: 2 },
+      { matchup: "A & C vs B & D", dates: "Jan 25–31", team1: 3, team2: 2 },
+      { matchup: "A & F vs B & E", dates: "Feb 15–21", team1: 0, team2: 3 },
+    ],
+    "Dire Straits": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 3, team2: 0 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 3, team2: 1 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 3, team2: 1 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 3, team2: 1 },
+      { matchup: "A & E vs B & F", dates: "Dec 28–Jan 3", team1: 2, team2: 3 },
+      { matchup: "A & C vs B & D", dates: "Jan 25–31", team1: 3, team2: 2 },
+    ],
+    Metallica: [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 0, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 0, team2: 3 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 3, team2: 2 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 1, team2: 3 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 3, team2: 2 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 0, team2: 3 },
+      { matchup: "A & E vs B & F", dates: "Dec 28–Jan 3", team1: 1, team2: 3 },
+      { matchup: "A & B vs C & E", dates: "Jan 4–10", team1: 3, team2: 1 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 3, team2: 1 },
+      { matchup: "A & C vs B & D", dates: "Jan 25–31", team1: 0, team2: 3 },
+      { matchup: "B & D vs E & F", dates: "Feb 1–7", team1: 3, team2: 1 },
+    ],
+    Nirvana: [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 1, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 1, team2: 3 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 0, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 0 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 0, team2: 3 },
+      { matchup: "B & D vs E & F", dates: "Feb 1–7", team1: 1, team2: 3 },
+    ],
+    "Fleetwood Mac": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 1, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 1, team2: 3 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 2, team2: 3 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 3, team2: 1 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 0, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 0 },
+      { matchup: "A & E vs B & F", dates: "Dec 28–Jan 3", team1: 2, team2: 3 },
+      { matchup: "A & B vs C & E", dates: "Jan 4–10", team1: 3, team2: 1 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 3, team2: 2 },
+      { matchup: "A & E vs C & F", dates: "Jan 18–24", team1: 1, team2: 3 },
+      { matchup: "A & C vs B & D", dates: "Jan 25–31", team1: 3, team2: 1 },
+      { matchup: "B & D vs E & F", dates: "Feb 1–7", team1: 3, team2: 1 },
+      { matchup: "A & D vs C & E", dates: "Feb 8–14", team1: 1, team2: 3 },
+      { matchup: "A & F vs B & E", dates: "Feb 15–21", team1: 3, team2: 0 },
+    ],
+    "Guns N' Roses": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 1, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 1, team2: 3 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 0, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 0 },
+      { matchup: "B & D vs C & F", dates: "Jan 11–17", team1: 0, team2: 3 },
+      { matchup: "A & E vs C & F", dates: "Jan 18–24", team1: 1, team2: 3 },
+    ],
+    "Pearl Jam": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 0, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 3, team2: 2 },
+    ],
+    "Deep Purple": [
+      { matchup: "A & D vs B & C", dates: "Nov 2–8", team1: 1, team2: 3 },
+      { matchup: "A & F vs D & E", dates: "Nov 9–15", team1: 1, team2: 3 },
+      { matchup: "B & E vs C & F", dates: "Nov 16–29", team1: 2, team2: 3 },
+      { matchup: "A & B vs D & F", dates: "Nov 30–Dec 6", team1: 3, team2: 1 },
+      { matchup: "B & E vs C & D", dates: "Dec 7–13", team1: 0, team2: 3 },
+      { matchup: "A & C vs D & F", dates: "Dec 14–27", team1: 3, team2: 0 },
+      { matchup: "A & E vs C & F", dates: "Jan 18–24", team1: 3, team2: 1 },
+    ],
+  };
+
+  // Get player totals for a box, sorted by total descending.
+  function getBoxPlayerTotals(team) {
+    const rows = getFullBoxRows(team);
+    const playerTotals = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
+    rows.forEach((row) => {
+      ["a", "b", "c", "d", "e", "f"].forEach((key) => {
+        const letter = key.toUpperCase();
+        const val = row[key];
+        if (val !== "X" && val !== "" && val != null) {
+          playerTotals[letter] += Number(val) || 0;
+        }
+      });
+    });
+    const players = BOX_PLAYERS && BOX_PLAYERS[team];
+    return ["A", "B", "C", "D", "E", "F"]
+      .map((letter) => ({
+        letter,
+        name: (players && players[letter]) || "",
+        total: playerTotals[letter],
+      }))
+      .sort((a, b) => b.total - a.total);
+  }
+
+  // Build full 15 rows for a box, merging canonical matchups with recorded scores.
+  function getFullBoxRows(team) {
+    const recorded = (BOX_SCHEDULES[team] || []).reduce((acc, r) => {
+      acc[r.matchup] = r;
+      return acc;
+    }, {});
+    return FULL_BOX_MATCHUPS.map((m) => {
+      const r = recorded[m.matchup];
+      const team1 = r ? r.team1 : "";
+      const team2 = r ? r.team2 : "";
+      const scores = getPlayerScoresForMatchup(m.matchup, team1, team2);
+      return {
+        matchup: m.matchup,
+        dates: m.dates,
+        team1,
+        team2,
+        a: scores.A,
+        b: scores.B,
+        c: scores.C,
+        d: scores.D,
+        e: scores.E,
+        f: scores.F,
+      };
+    });
+  }
+
   function getTeamsForLevel(level) {
     const list = level === "open" ? TEAMS_OPEN : level === "main" ? TEAMS_MAIN : [];
     return list.filter((t) => !TEAMS_EXCLUDED.has(t));
@@ -73,7 +326,7 @@
         league: entry.league,
         level: entry.level,
         week: Number(entry.week),
-        year: getSelectedYear(),
+        year: getYearFrom("year-input"),
         handicap_team1: entry.handicap_team1 || undefined,
         handicap_team2: entry.handicap_team2 || undefined,
         team1: entry.team1,
@@ -91,7 +344,7 @@
   }
 
   async function fetchStandings(league, level) {
-    const year = getSelectedYear();
+    const year = getYearFrom("year-standings");
     const res = await fetch(
       `${apiUrl(`/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}`)}?year=${year}`
     );
@@ -99,9 +352,40 @@
     return res.json();
   }
 
-  function getSelectedYear() {
-    const el = document.getElementById("year");
-    return el ? parseInt(el.value, 10) : 2025;
+  function getYearFrom(selectId) {
+    const el = document.getElementById(selectId);
+    if (!el) return 2025;
+    const v = parseInt(el.value, 10);
+    return Number.isNaN(v) ? 2025 : v;
+  }
+
+  async function fetchYears() {
+    const res = await fetch(apiUrl("/api/years"));
+    if (!res.ok) throw new Error("Failed to load seasons");
+    return res.json();
+  }
+
+  async function initYearDropdowns() {
+    const ids = ["year-schedule", "year-input", "year-standings"];
+    try {
+      const years = await fetchYears();
+      if (!Array.isArray(years) || years.length === 0) return;
+      const latest = Math.max.apply(null, years);
+      ids.forEach((id) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        select.innerHTML = "";
+        years.forEach((y) => {
+          const option = document.createElement("option");
+          option.value = String(y);
+          option.textContent = `${y}-${y + 1}`;
+          select.appendChild(option);
+        });
+        select.value = String(latest);
+      });
+    } catch (err) {
+      console.error(err);
+    }
   }
 
   function switchTab(tabId) {
@@ -128,7 +412,11 @@
   }
 
   async function fetchSchedule(level) {
-    const year = getSelectedYear();
+    if (level === "box") {
+      // Box league schedule is static, per-team, not from the API
+      return null;
+    }
+    const year = getYearFrom("year-schedule");
     const res = await fetch(
       `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`
     );
@@ -145,7 +433,11 @@
       p.classList.toggle("active", id === level);
       p.hidden = id !== level;
     });
-    renderScheduleTable(level);
+    if (level === "box") {
+      renderBoxSchedule();
+    } else {
+      renderScheduleTable(level);
+    }
   }
 
   async function renderScheduleTable(level) {
@@ -184,6 +476,78 @@
   function renderSchedule() {
     renderScheduleTable("open");
     renderScheduleTable("main");
+    renderBoxSchedule();
+  }
+
+  function renderBoxSchedule() {
+    const tbody = document.getElementById("schedule-tbody-box");
+    if (!tbody) return;
+    const activeTab = document.querySelector(".box-tab.active");
+    const team = activeTab ? activeTab.dataset.boxTeam : "Foo Fighters";
+    const rows = getFullBoxRows(team);
+    tbody.innerHTML = "";
+
+    // Update player headers (A..F = name) to match this box.
+    const headerCells = document.querySelectorAll(".box-player-header");
+    const players = BOX_PLAYERS && BOX_PLAYERS[team];
+    if (players) {
+      headerCells.forEach((th) => {
+        const letter = th.dataset.letter;
+        const name = players[letter] || "";
+        th.textContent = `${letter}=${name}`;
+      });
+    }
+
+    let total1 = 0;
+    let total2 = 0;
+    const playerTotals = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      const a = escapeHtml(String(row.a ?? ""));
+      const b = escapeHtml(String(row.b ?? ""));
+      const c = escapeHtml(String(row.c ?? ""));
+      const d = escapeHtml(String(row.d ?? ""));
+      const e = escapeHtml(String(row.e ?? ""));
+      const f = escapeHtml(String(row.f ?? ""));
+      tr.innerHTML = `
+        <td>${escapeHtml(row.matchup)}</td>
+        <td>${escapeHtml(row.dates)}</td>
+        <td>${row.team1}</td>
+        <td>${row.team2}</td>
+        <td>${a}</td>
+        <td>${b}</td>
+        <td>${c}</td>
+        <td>${d}</td>
+        <td>${e}</td>
+        <td>${f}</td>
+      `;
+      tbody.appendChild(tr);
+      total1 += Number(row.team1) || 0;
+      total2 += Number(row.team2) || 0;
+      ["a", "b", "c", "d", "e", "f"].forEach((key, i) => {
+        const letter = key.toUpperCase();
+        const val = row[key];
+        if (val !== "X" && val !== "" && val != null) {
+          playerTotals[letter] += Number(val) || 0;
+        }
+      });
+    });
+
+    const trTotal = document.createElement("tr");
+    trTotal.className = "box-totals-row";
+    trTotal.innerHTML = `
+      <td><strong>Totals</strong></td>
+      <td></td>
+      <td><strong>${total1}</strong></td>
+      <td><strong>${total2}</strong></td>
+      <td><strong>${playerTotals.A}</strong></td>
+      <td><strong>${playerTotals.B}</strong></td>
+      <td><strong>${playerTotals.C}</strong></td>
+      <td><strong>${playerTotals.D}</strong></td>
+      <td><strong>${playerTotals.E}</strong></td>
+      <td><strong>${playerTotals.F}</strong></td>
+    `;
+    tbody.appendChild(trTotal);
   }
 
   function switchStandingsTab(standingsId) {
@@ -195,13 +559,35 @@
       p.classList.toggle("active", id === standingsId);
       p.hidden = id !== standingsId;
     });
-    renderStandingsTable(standingsId);
+    if (standingsId === "box") {
+      renderBoxStandings();
+    } else {
+      renderStandingsTable(standingsId);
+    }
   }
 
   function escapeHtml(s) {
     const div = document.createElement("div");
     div.textContent = s;
     return div.innerHTML;
+  }
+
+  function renderBoxStandings() {
+    const tbody = document.getElementById("tbody-standings-box");
+    if (!tbody) return;
+    const activeTab = document.querySelector(".standings-box-tabs .box-tab.active");
+    const team = activeTab ? activeTab.dataset.standingsBox : "Foo Fighters";
+    const rows = getBoxPlayerTotals(team);
+    tbody.innerHTML = "";
+    rows.forEach((row, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${escapeHtml(row.name || row.letter)}</td>
+        <td>${row.total}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
 
   async function renderStandingsTable(standingsId) {
@@ -234,6 +620,7 @@
   function renderStandings() {
     renderStandingsTable("handicap-open");
     renderStandingsTable("handicap-main");
+    renderBoxStandings();
   }
 
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -250,10 +637,36 @@
     );
   });
 
-  document.getElementById("year").addEventListener("change", () => {
-    const tab = document.querySelector(".tab.active");
-    if (tab && tab.dataset.tab === "standings") renderStandings();
-    if (tab && tab.dataset.tab === "schedule") renderSchedule();
+  const yearSchedule = document.getElementById("year-schedule");
+  if (yearSchedule) {
+    yearSchedule.addEventListener("change", () => {
+      renderSchedule();
+    });
+  }
+
+  const yearStandings = document.getElementById("year-standings");
+  if (yearStandings) {
+    yearStandings.addEventListener("change", () => {
+      renderStandings();
+    });
+  }
+
+  document.querySelectorAll("#schedule-panel-box .box-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#schedule-panel-box .box-tab").forEach((t) => {
+        t.classList.toggle("active", t === btn);
+      });
+      renderBoxSchedule();
+    });
+  });
+
+  document.querySelectorAll(".standings-box-tabs .box-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".standings-box-tabs .box-tab").forEach((t) => {
+        t.classList.toggle("active", t === btn);
+      });
+      renderBoxStandings();
+    });
   });
 
   document.getElementById("level").addEventListener("change", () => {
@@ -327,4 +740,7 @@
       alert(err.message || "Failed to submit score");
     }
   });
+
+  // Initialize season dropdowns from backend SEASON_YEARS
+  initYearDropdowns();
 })();
