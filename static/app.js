@@ -1,5 +1,26 @@
 (function () {
-  const API_BASE = "";
+  function getApiBase() {
+    const fromWindow =
+      typeof window !== "undefined" && window.RCD_API_BASE ? String(window.RCD_API_BASE) : "";
+    const url = new URL(window.location.href);
+    const fromQuery = url.searchParams.get("api") || "";
+    const base = (fromQuery || fromWindow || "").trim().replace(/\/+$/, "");
+    return base;
+  }
+
+  const API_BASE = getApiBase();
+
+  function apiUrl(path) {
+    if (!path.startsWith("/")) throw new Error("apiUrl expects an absolute path");
+    if (API_BASE) return API_BASE + path;
+    const isGitHubPages = window.location.hostname.endsWith("github.io");
+    if (isGitHubPages) {
+      throw new Error(
+        "Backend API not configured for GitHub Pages. Set window.RCD_API_BASE in static/config.js (or use ?api=https://your-backend) and reload."
+      );
+    }
+    return path; // same-origin (local Flask)
+  }
 
   const TEAMS_OPEN = [
     "Even Older and Grumpier",
@@ -45,7 +66,7 @@
   }
 
   async function postScore(entry) {
-    const res = await fetch(API_BASE + "/api/scores", {
+    const res = await fetch(apiUrl("/api/scores"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -72,7 +93,7 @@
   async function fetchStandings(league, level) {
     const year = getSelectedYear();
     const res = await fetch(
-      `${API_BASE}/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}?year=${year}`
+      `${apiUrl(`/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}`)}?year=${year}`
     );
     if (!res.ok) throw new Error("Failed to load standings");
     return res.json();
@@ -109,7 +130,7 @@
   async function fetchSchedule(level) {
     const year = getSelectedYear();
     const res = await fetch(
-      `${API_BASE}/api/schedule?level=${encodeURIComponent(level)}&year=${year}`
+      `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`
     );
     if (!res.ok) throw new Error("Failed to load schedule");
     return res.json();
