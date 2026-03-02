@@ -94,20 +94,20 @@ body {
   color: var(--accent);
 }
 
-.tabs-season {
+.section-season {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  margin: 8px 0 16px;
 }
 
-.tabs-season-label {
+.section-season-label {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
 }
 
-.tabs-season-select {
+.section-season-select {
   padding: 8px 12px;
   font-family: inherit;
   font-size: 0.9375rem;
@@ -119,7 +119,7 @@ body {
   cursor: pointer;
 }
 
-.tabs-season-select:focus {
+.section-season-select:focus {
   outline: none;
   border-color: var(--accent);
 }
@@ -425,6 +425,45 @@ body {
   border-color: var(--accent);
 }
 
+.box-league {
+  margin-top: 8px;
+}
+
+.box-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.box-tab {
+  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.box-tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.box-tab.active {
+  color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.box-totals-row td {
+  border-top: 2px solid var(--border);
+}
+
 .schedule-panel {
   display: none;
 }
@@ -474,6 +513,65 @@ body {
   color: var(--text-muted);
   font-size: 0.9375rem;
   padding: 24px 0;
+}
+
+/* Wall of Fame */
+.content-card--fame {
+  max-width: 720px;
+}
+
+.content-card--fame h2 {
+  margin-top: 0;
+  margin-bottom: 24px;
+}
+
+.fame-section {
+  margin-bottom: 40px;
+}
+
+.fame-section:last-child {
+  margin-bottom: 0;
+}
+
+.fame-section h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fame-figure {
+  margin: 0 0 16px;
+}
+
+.fame-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.fame-caption {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.fame-teams {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.fame-teams p {
+  margin: 0 0 8px;
+}
+
+.fame-teams p:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 640px) {
