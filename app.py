@@ -150,6 +150,16 @@ def init_db():
         conn.commit()
 
 
+# Ensure tables exist when running under a WSGI server (e.g. gunicorn on Render).
+# `init_db()` is idempotent (CREATE TABLE IF NOT EXISTS + guarded ALTERs).
+try:
+    init_db()
+except Exception:
+    # If the filesystem is read-only or DB path is misconfigured, the API will fail anyway;
+    # let the error surface in API calls and logs rather than crashing import.
+    pass
+
+
 def points_for_team(games_won: int, is_winner: bool) -> int:
     """1 pt play, 1 pt win, 1 pt per game won."""
     pts = 1
