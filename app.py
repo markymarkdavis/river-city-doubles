@@ -153,6 +153,40 @@ def init_db():
 def ensure_db_ready():
     """Create/upgrade tables if needed (safe to call repeatedly)."""
     init_db()
+    seed_if_empty()
+
+
+def seed_if_empty():
+    """
+    One-time seed of 2025 handicap Open/Main schedule + scores if the DB is empty.
+    Uses the existing seed scripts so local + Render stay in sync.
+    """
+    try:
+        with get_db() as conn:
+            # If we already have any 2025 schedule rows, assume it has been seeded.
+            existing = conn.execute(
+                "SELECT COUNT(*) AS c FROM schedule WHERE year = ?",
+                (2025,),
+            ).fetchone()
+            if existing and existing["c"] > 0:
+                return
+    except sqlite3.Error:
+        # If we can't even query schedule, let the API path surface the error.
+        return
+
+    try:
+        # Import only when needed to avoid unnecessary work on every request.
+        import seed_schedule
+        import seed_main_schedule
+        import backfill_standings_from_schedule
+
+        seed_schedule.main()
+        seed_main_schedule.main()
+        backfill_standings_from_schedule.main()
+    except Exception:
+        # If seeding fails (e.g. read-only FS), leave DB empty and let API calls
+        # behave as "no data yet" or surface DB errors for debugging.
+        return
 
 
 def points_for_team(games_won: int, is_winner: bool) -> int:
