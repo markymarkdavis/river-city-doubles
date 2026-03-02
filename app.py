@@ -150,14 +150,9 @@ def init_db():
         conn.commit()
 
 
-# Ensure tables exist when running under a WSGI server (e.g. gunicorn on Render).
-# `init_db()` is idempotent (CREATE TABLE IF NOT EXISTS + guarded ALTERs).
-try:
+def ensure_db_ready():
+    """Create/upgrade tables if needed (safe to call repeatedly)."""
     init_db()
-except Exception:
-    # If the filesystem is read-only or DB path is misconfigured, the API will fail anyway;
-    # let the error surface in API calls and logs rather than crashing import.
-    pass
 
 
 def points_for_team(games_won: int, is_winner: bool) -> int:
@@ -278,12 +273,16 @@ def get_standings(league, level):
     allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
     teams = {name: {"points": 0, "matches": 0, "wins": 0, "gamesWon": 0} for name in allowed}
 
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT team1, team2, games1, games2 FROM scores
-               WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
-            (league, level, year),
-        ).fetchall()
+    try:
+        ensure_db_ready()
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT team1, team2, games1, games2 FROM scores
+                   WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
+                (league, level, year),
+            ).fetchall()
+    except sqlite3.Error as e:
+        return jsonify({"error": "Database error", "detail": str(e)}), 500
 
     for r in rows:
         t1, t2 = r["team1"], r["team2"]
@@ -312,12 +311,16 @@ def get_schedule():
     year = request.args.get("year", type=int)
     if year is None:
         year = SEASON_YEARS[-1]
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT week, date_range, team1, team2, bye, team1_players, team2_players,
-                      handicap, score, winner FROM schedule WHERE level = ? AND (year = ? OR year IS NULL) ORDER BY week, id""",
-            (level, year),
-        ).fetchall()
+    try:
+        ensure_db_ready()
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT week, date_range, team1, team2, bye, team1_players, team2_players,
+                          handicap, score, winner FROM schedule WHERE level = ? AND (year = ? OR year IS NULL) ORDER BY week, id""",
+                (level, year),
+            ).fetchall()
+    except sqlite3.Error as e:
+        return jsonify({"error": "Database error", "detail": str(e)}), 500
     out = [
         {
             "week": r["week"],
