@@ -5,9 +5,16 @@ Stores scores in SQLite and serves standings for handicap open/main.
 import os
 import sqlite3
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
+
+cors_origins = os.environ.get("RCD_CORS_ORIGINS", "*").strip()
+CORS(
+    app,
+    resources={r"/api/*": {"origins": [o.strip() for o in cors_origins.split(",")] if cors_origins != "*" else "*"}},
+)
 
 TEAMS_OPEN = [
     "Even Older and Grumpier",

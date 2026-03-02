@@ -1,3 +1,32 @@
+# Hosting
+
+## GitHub Pages (frontend) + Flask host (backend)
+
+GitHub Pages can only host static files. This repo is set up to:
+
+- host the frontend from `static/` via GitHub Pages
+- host the Flask API (`/api/*`) on a separate Flask-capable host (e.g. Render)
+
+### Frontend (GitHub Pages)
+
+1. Push to `main`
+2. In GitHub repo settings:
+   - Settings → Pages → Source: **GitHub Actions**
+3. Set your API base URL in `static/config.js`:
+
+```js
+window.RCD_API_BASE = "https://your-flask-service.onrender.com";
+```
+
+### Backend (Flask host, e.g. Render)
+
+- Start command: `gunicorn app:app`
+- CORS: set `RCD_CORS_ORIGINS` (comma-separated) to your GitHub Pages origin, e.g.
+
+`RCD_CORS_ORIGINS=https://<your-user>.github.io`
+
+If you’re using SQLite and need persistence, configure a persistent disk and set `RCD_DB` to that mounted path.
+
 # River City Doubles
 
 Richmond doubles squash league: box league and handicap league (open & main).
