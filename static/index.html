@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>River City Doubles League</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="logo" aria-hidden="true">
+      <img src="doubles_logo.png" alt="River City Doubles Squash" />
+    </div>
+    <h1 class="site-title">River City Doubles Squash</h1>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="schedule">Schedule</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="input">Input Score</button>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="standings">Standings</button>
+    <div class="tabs-season">
+      <label for="year" class="tabs-season-label">Season</label>
+      <select id="year" name="year" class="tabs-season-select" aria-label="Season">
+        <option value="2025">2025-2026</option>
+      </select>
+    </div>
+  </nav>
+
+  <main class="main">
+    <section id="panel-home" class="panel active" role="tabpanel" aria-labelledby="tab-home">
+      <div class="content-card">
+        <h2>Welcome to River City Doubles</h2>
+        <p>
+          The River City Doubles League is a Richmond doubles squash league that has been running for a couple of seasons.
+        </p>
+        <p>
+          We run two types of leagues:
+        </p>
+        <ul>
+          <li><strong>Box league</strong> — Players in each box are the same level, so you get competitive matches every week.</li>
+          <li><strong>Handicap league</strong> — A mix of player levels; handicaps keep matches fair and fun for everyone.</li>
+        </ul>
+        <p>
+          Use <strong>Input Score</strong> to submit your match results and check <strong>Standings</strong> to see how your team is doing.
+        </p>
+      </div>
+    </section>
+
+    <section id="panel-schedule" class="panel" role="tabpanel" aria-labelledby="tab-schedule" hidden>
+      <div class="content-card content-card--schedule">
+        <h2>Schedule</h2>
+        <div class="schedule-tabs">
+          <button type="button" class="schedule-tab active" data-schedule-level="open">Open</button>
+          <button type="button" class="schedule-tab" data-schedule-level="main">Main</button>
+        </div>
+        <div class="schedule-wrapper">
+          <div id="schedule-panel-open" class="schedule-panel active">
+            <div class="table-scroll">
+              <table class="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Date Range</th>
+                    <th>Team 1</th>
+                    <th>Team 2</th>
+                    <th>Bye</th>
+                    <th>Team 1 Players</th>
+                    <th>Team 2 Players</th>
+                    <th>Handicap</th>
+                    <th>Score</th>
+                    <th>Winner</th>
+                  </tr>
+                </thead>
+                <tbody id="schedule-tbody-open"></tbody>
+              </table>
+            </div>
+            <p id="empty-schedule-open" class="empty-state" hidden>No schedule entries yet for Open.</p>
+          </div>
+          <div id="schedule-panel-main" class="schedule-panel" hidden>
+            <div class="table-scroll">
+              <table class="schedule-table">
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Date Range</th>
+                    <th>Team 1</th>
+                    <th>Team 2</th>
+                    <th>Bye</th>
+                    <th>Team 1 Players</th>
+                    <th>Team 2 Players</th>
+                    <th>Handicap</th>
+                    <th>Score</th>
+                    <th>Winner</th>
+                  </tr>
+                </thead>
+                <tbody id="schedule-tbody-main"></tbody>
+              </table>
+            </div>
+            <p id="empty-schedule-main" class="empty-state" hidden>No schedule entries yet for Main.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" hidden>
+      <div class="content-card form-card">
+        <h2>Input Score</h2>
+        <form id="score-form" class="score-form">
+          <div class="form-row">
+            <label for="league">League</label>
+            <select id="league" name="league" required>
+              <option value="">Select league</option>
+              <option value="box">Box</option>
+              <option value="handicap">Handicap</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="level">Level</label>
+            <select id="level" name="level" required>
+              <option value="">Select level</option>
+              <option value="open">Open</option>
+              <option value="main">Main</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="week">Week</label>
+            <select id="week" name="week" required>
+              <option value="">Select week</option>
+              <option value="1">1 — Jan 18–Jan 24</option>
+              <option value="2">2 — Jan 25–Jan 31</option>
+              <option value="3">3 — Feb 1–Feb 7</option>
+              <option value="4">4 — Feb 8–Feb 14</option>
+              <option value="5">5 — Feb 15–Feb 21</option>
+              <option value="6">6 — Feb 22–Feb 28</option>
+              <option value="7">7 — Mar 1–Mar 7</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="team1">Team 1</label>
+            <select id="team1" name="team1" required>
+              <option value="">Select level first</option>
+            </select>
+          </div>
+          <div class="form-row form-row-indent">
+            <label for="team1_player1">Team 1 Player 1</label>
+            <input type="text" id="team1_player1" name="team1_player1" placeholder="Player name" />
+          </div>
+          <div class="form-row form-row-indent">
+            <label for="team1_player2">Team 1 Player 2</label>
+            <input type="text" id="team1_player2" name="team1_player2" placeholder="Player name" />
+          </div>
+          <div class="form-row">
+            <label for="team2">Team 2</label>
+            <select id="team2" name="team2" required>
+              <option value="">Select level first</option>
+            </select>
+          </div>
+          <div class="form-row form-row-indent">
+            <label for="team2_player1">Team 2 Player 1</label>
+            <input type="text" id="team2_player1" name="team2_player1" placeholder="Player name" />
+          </div>
+          <div class="form-row form-row-indent">
+            <label for="team2_player2">Team 2 Player 2</label>
+            <input type="text" id="team2_player2" name="team2_player2" placeholder="Player name" />
+          </div>
+          <div class="form-row">
+            <label for="handicap_team1">Team 1 Handicap</label>
+            <input type="text" id="handicap_team1" name="handicap_team1" placeholder="Optional" />
+          </div>
+          <div class="form-row">
+            <label for="handicap_team2">Team 2 Handicap</label>
+            <input type="text" id="handicap_team2" name="handicap_team2" placeholder="Optional" />
+          </div>
+          <p class="form-hint">Best of 5 games. No team can win more than 3. Enter games won by each team.</p>
+          <div class="form-row inline-group">
+            <label for="games1">Games won (Team 1)</label>
+            <input type="number" id="games1" name="games1" min="0" max="3" value="0" required />
+          </div>
+          <div class="form-row inline-group">
+            <label for="games2">Games won (Team 2)</label>
+            <input type="number" id="games2" name="games2" min="0" max="3" value="0" required />
+          </div>
+          <button type="submit" class="btn btn-primary">Submit Score</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-standings" class="panel" role="tabpanel" aria-labelledby="tab-standings" hidden>
+      <div class="content-card">
+        <h2>Standings</h2>
+        <p class="standings-intro">Scoring: 1 point for playing, 1 point for winning the match, and 1 point per game won. Listed alphabetically by team.</p>
+        <div class="standings-tabs">
+          <button type="button" class="standings-tab active" data-standings="handicap-open">Handicap Open</button>
+          <button type="button" class="standings-tab" data-standings="handicap-main">Handicap Main</button>
+        </div>
+        <div id="standings-handicap-open" class="standings-panel active">
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team</th>
+                <th>Points</th>
+                <th>Matches</th>
+                <th>Record</th>
+                <th>Games won</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-handicap-open"></tbody>
+          </table>
+        </div>
+        <div id="standings-handicap-main" class="standings-panel" hidden>
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team</th>
+                <th>Points</th>
+                <th>Matches</th>
+                <th>Record</th>
+                <th>Games won</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-handicap-main"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
