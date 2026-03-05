@@ -407,8 +407,31 @@
       panel.classList.add("active");
       panel.hidden = false;
     }
+    const navRulesSelect = document.getElementById("nav-rules-select");
+    const navScheduleSelect = document.getElementById("nav-schedule-select");
+    const navInputSelect = document.getElementById("nav-input-select");
+    const navStandingsSelect = document.getElementById("nav-standings-select");
+    if (tabId === "rules") {
+      if (navRulesSelect) navRulesSelect.value = "";
+    } else if (navRulesSelect) {
+      navRulesSelect.value = "";
+    }
+    if (navScheduleSelect) navScheduleSelect.value = "";
+    if (navInputSelect) navInputSelect.value = "";
+    if (navStandingsSelect) navStandingsSelect.value = "";
     if (tabId === "standings") renderStandings();
     if (tabId === "schedule") renderSchedule();
+    if (tabId === "rules") updateRulesContent();
+  }
+
+  let currentRulesView = "doubles";
+
+  function updateRulesContent() {
+    const doublesEl = document.getElementById("rules-content-doubles");
+    const handicapEl = document.getElementById("rules-content-handicap");
+    if (!doublesEl || !handicapEl) return;
+    doublesEl.hidden = currentRulesView !== "doubles";
+    handicapEl.hidden = currentRulesView !== "handicap";
   }
 
   async function fetchSchedule(level) {
@@ -624,8 +647,46 @@
   }
 
   document.querySelectorAll(".tab").forEach((btn) => {
+    if (btn.querySelector("select")) return;
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
+
+  function onNavDropdownChange(tabId, selectId, valueWhenSelected) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.addEventListener("change", () => {
+      const value = sel.value;
+      if (value === "" || value === valueWhenSelected) {
+        switchTab(tabId);
+        sel.value = "";
+      } else {
+        switchTab(tabId);
+        sel.value = "";
+      }
+    });
+  }
+
+  onNavDropdownChange("schedule", "nav-schedule-select", "2025-2026");
+  onNavDropdownChange("input", "nav-input-select", "2025-2026");
+  onNavDropdownChange("standings", "nav-standings-select", "2025-2026");
+
+  const navRulesSelect = document.getElementById("nav-rules-select");
+  if (navRulesSelect) {
+    navRulesSelect.addEventListener("change", () => {
+      const value = navRulesSelect.value;
+      if (value === "") {
+        switchTab("rules");
+        currentRulesView = "doubles";
+        updateRulesContent();
+        navRulesSelect.value = "";
+      } else {
+        currentRulesView = value;
+        switchTab("rules");
+        updateRulesContent();
+        navRulesSelect.value = "";
+      }
+    });
+  }
 
   document.querySelectorAll(".standings-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchStandingsTab(btn.dataset.standings));
@@ -636,20 +697,6 @@
       switchScheduleTab(btn.dataset.scheduleLevel)
     );
   });
-
-  const yearSchedule = document.getElementById("year-schedule");
-  if (yearSchedule) {
-    yearSchedule.addEventListener("change", () => {
-      renderSchedule();
-    });
-  }
-
-  const yearStandings = document.getElementById("year-standings");
-  if (yearStandings) {
-    yearStandings.addEventListener("change", () => {
-      renderStandings();
-    });
-  }
 
   document.querySelectorAll("#schedule-panel-box .box-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
