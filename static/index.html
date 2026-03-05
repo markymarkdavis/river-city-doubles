@@ -19,9 +19,31 @@
 
   <nav class="tabs" role="tablist">
     <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="schedule">Schedule</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="input">Input Score</button>
-    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="standings">Standings</button>
+    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="schedule" id="tab-schedule-wrap">
+      <select id="nav-schedule-select" class="tab-dropdown-select" aria-label="Schedule">
+        <option value="">Schedule</option>
+        <option value="2025-2026">2025-2026</option>
+      </select>
+    </span>
+    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="input" id="tab-input-wrap">
+      <select id="nav-input-select" class="tab-dropdown-select" aria-label="Input Score">
+        <option value="">Input Score</option>
+        <option value="2025-2026">2025-2026</option>
+      </select>
+    </span>
+    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="standings" id="tab-standings-wrap">
+      <select id="nav-standings-select" class="tab-dropdown-select" aria-label="Standings">
+        <option value="">Standings</option>
+        <option value="2025-2026">2025-2026</option>
+      </select>
+    </span>
+    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="rules" id="tab-rules-wrap">
+      <select id="nav-rules-select" class="tab-dropdown-select" aria-label="Rules">
+        <option value="">Rules</option>
+        <option value="doubles">Doubles Squash rules</option>
+        <option value="handicap">River City Doubles Handicap Rules</option>
+      </select>
+    </span>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="fame">Wall of Fame</button>
   </nav>
 
@@ -48,12 +70,6 @@
     <section id="panel-schedule" class="panel" role="tabpanel" aria-labelledby="tab-schedule" hidden>
       <div class="content-card content-card--schedule">
         <h2>Schedule</h2>
-        <div class="section-season">
-          <label for="year-schedule" class="section-season-label">Season</label>
-          <select id="year-schedule" name="year-schedule" class="section-season-select" aria-label="Season for schedule">
-            <option value="2025">2025-2026</option>
-          </select>
-        </div>
         <div class="schedule-tabs">
           <button type="button" class="schedule-tab active" data-schedule-level="open">Open Handicap</button>
           <button type="button" class="schedule-tab" data-schedule-level="main">Main Handicap</button>
@@ -145,12 +161,6 @@
     <section id="panel-input" class="panel" role="tabpanel" aria-labelledby="tab-input" hidden>
       <div class="content-card form-card">
         <h2>Input Score</h2>
-        <div class="section-season">
-          <label for="year-input" class="section-season-label">Season</label>
-          <select id="year-input" name="year-input" class="section-season-select" aria-label="Season for input scores">
-            <option value="2025">2025-2026</option>
-          </select>
-        </div>
         <form id="score-form" class="score-form">
           <div class="form-row">
             <label for="league">League</label>
@@ -234,12 +244,6 @@
     <section id="panel-standings" class="panel" role="tabpanel" aria-labelledby="tab-standings" hidden>
       <div class="content-card">
         <h2>Standings</h2>
-        <div class="section-season">
-          <label for="year-standings" class="section-season-label">Season</label>
-          <select id="year-standings" name="year-standings" class="section-season-select" aria-label="Season for standings">
-            <option value="2025">2025-2026</option>
-          </select>
-        </div>
         <p class="standings-intro">Scoring: 1 point for playing, 1 point for winning the match, and 1 point per game won. Listed alphabetically by team.</p>
         <div class="standings-tabs">
           <button type="button" class="standings-tab active" data-standings="handicap-open">Open Handicap</button>
@@ -331,6 +335,65 @@
             <p><strong>Runners up — Team Lightning:</strong> Mark Davis, Rand Robins, Jimmy Cooke, Spencer Williamson</p>
           </div>
         </section>
+      </div>
+    </section>
+
+    <section id="panel-rules" class="panel" role="tabpanel" aria-labelledby="tab-rules" hidden>
+      <div class="content-card">
+        <h2>Rules</h2>
+        <div id="rules-content-doubles" class="rules-content">
+          <p class="rules-source">Synthesis of the <a href="https://ussquash.org/wp-content/uploads/2025/11/2025-Hardball-Squash-Doubles-Rules.pdf" target="_blank" rel="noopener">2025 Hardball Squash Doubles Playing Rules</a> (US Squash / Squash Canada / WSF).</p>
+          <h3>Game and match</h3>
+          <ul>
+            <li><strong>Game:</strong> First side to 15 points wins the game. Points are won by winning a rally or by being awarded them.</li>
+            <li><strong>Match:</strong> First side to win three games wins the match. A match may be awarded on retirement, default, or disqualification.</li>
+          </ul>
+          <h3>Service</h3>
+          <ul>
+            <li>Serve begins each point. At the start of a match, spin of racquet decides who serves or receives.</li>
+            <li>Partners serve in succession; the first server keeps serving until the side loses a point. On the first serve of every game, the “in” side is “out” after losing one point only.</li>
+            <li>Server must have one foot (or part of it) in the service box, not touching the line, when the ball is struck. Ball must hit the front wall above the service line and below the top line, and on the rebound first strike the floor within the opposite service court (not touching the lines).</li>
+            <li>If the first service is a fault, the server serves again from the same side. Two consecutive faults lose the point. A fault may not be played, but the receiver may volley a service that has struck the front wall correctly.</li>
+            <li>Server alternates service box each time the side becomes “in” until the side is “out” or the game ends.</li>
+          </ul>
+          <h3>Return and play</h3>
+          <ul>
+            <li>Return is made when the ball touches the racquet. The player must be in control of the racquet at contact. A good return must be struck on the volley or before the ball has touched the floor twice, and must reach the front wall on the fly above the tell-tale and below the top line; it may touch other walls before or after.</li>
+            <li>Each side designates one player to receive in the right service court and one in the left; they must receive in that court for the whole game.</li>
+            <li>Until the ball has been touched or has hit the floor twice, either player on a side may strike it. If the ball hits outside the playing surfaces (e.g. ceiling, lights, or on/above the out line), that side loses the point except as provided for lets.</li>
+          </ul>
+          <h3>Right to play the ball</h3>
+          <ul>
+            <li>After the striker or their partner has struck the ball, each player must get out of the opponents’ way and: give a fair view of the ball; give a fair opportunity to get to and strike the ball; allow either opponent to play the ball to the front wall or back wall and to the relevant part of the side walls; and refrain from creating a visual or audible distraction.</li>
+            <li>A point may be awarded when an opponent’s violation deprives a player of a clear opportunity to attempt a winning shot, or when the opponent fails to make a reasonable effort to avoid the violation, or when repeated lets result from the same type of violation.</li>
+          </ul>
+          <h3>Lets and points</h3>
+          <ul>
+            <li><strong>Let:</strong> The point is replayed. The server gets two serves on the replay and must serve from the correct box. Lets apply when (among other cases) an opponent violates the right to play the ball (but not in a case that warrants a point), when the player refrains from striking for reasonable fear of injuring an opponent, or when the player is touched by an opponent or their equipment before or during the stroke.</li>
+            <li>A player may request a Let or a Point; the Referee may allow a Let, award a Point, or call No Let. Requests must be verbal and at the appropriate time (e.g. before or during the stroke, or immediately after in the case of an obstructed swing).</li>
+          </ul>
+          <h3>Ball touching a player</h3>
+          <ul>
+            <li>If the ball, after hitting the front wall but before being returned again, touches any player or what they wear or carry (other than the racquet of the player making the return), that player’s side loses the point, with exceptions (e.g. lets when the return would have been good).</li>
+            <li>If the ball touches the player who last returned it (or their partner) before it hits the front wall, that side loses the point, with limited exceptions.</li>
+          </ul>
+          <h3>Continuity and conduct</h3>
+          <ul>
+            <li>Play is continuous from the first service until the game ends. The interval between games is 2 minutes. The Referee may suspend play when necessary (e.g. injury, court condition).</li>
+            <li>Eye guards meeting the required standard must be worn. The Referee may warn, penalize, or default a player for unsportsmanlike conduct or dangerous play.</li>
+          </ul>
+        </div>
+        <div id="rules-content-handicap" class="rules-content" hidden>
+          <p class="rules-source">River City Doubles Handicap League rules. For the full document, see <a href="https://docs.google.com/document/d/1O3fXHjKslmGFPQFAv3idUjFcTI2L7ysOyIDZp_8HXOg/edit?tab=t.0" target="_blank" rel="noopener">River City Doubles Handicap League rules (Google Doc)</a>.</p>
+          <h3>Scoring</h3>
+          <p>Handicap league scoring (as used on this site’s standings):</p>
+          <ul>
+            <li>1 point for playing the match</li>
+            <li>1 point for winning the match</li>
+            <li>1 point per game won</li>
+          </ul>
+          <p>Standings are listed by total points. For full details, formats, and any local variations, refer to the official River City Doubles Handicap League rules document linked above.</p>
+        </div>
       </div>
     </section>
   </main>
