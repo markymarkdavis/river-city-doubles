@@ -365,26 +365,89 @@
     return res.json();
   }
 
+  const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings"];
+  const TAB_TO_YEAR_SELECT = { schedule: "year-schedule", input: "year-input", standings: "year-standings" };
+
+  function setYearForTab(tabId, value) {
+    const selectId = TAB_TO_YEAR_SELECT[tabId];
+    if (!selectId || value === undefined) return;
+    const year = typeof value === "string" ? parseInt(value.split("-")[0], 10) : value;
+    const select = document.getElementById(selectId);
+    if (select && !Number.isNaN(year)) select.value = String(year);
+  }
+
+  function fillYearOptions(years) {
+    if (!Array.isArray(years) || years.length === 0) return;
+    const latest = Math.max.apply(null, years);
+    const label = (y) => `${y}-${y + 1}`;
+
+    YEAR_SELECT_IDS.forEach((id) => {
+      let select = document.getElementById(id);
+      if (!select) {
+        select = document.createElement("select");
+        select.id = id;
+        select.setAttribute("aria-hidden", "true");
+        select.hidden = true;
+        document.body.appendChild(select);
+      }
+      select.innerHTML = "";
+      years.forEach((y) => {
+        const option = document.createElement("option");
+        option.value = String(y);
+        option.textContent = label(y);
+        select.appendChild(option);
+      });
+      select.value = String(latest);
+    });
+
+    const panelIds = ["nav-schedule-panel", "nav-input-panel", "nav-standings-panel"];
+    const tabIds = ["schedule", "input", "standings"];
+    panelIds.forEach((panelId, i) => {
+      const panel = document.getElementById(panelId);
+      const tabId = tabIds[i];
+      if (!panel || !tabId) return;
+      panel.innerHTML = "";
+      years.forEach((y) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tab-dropdown-option";
+        btn.setAttribute("data-tab", tabId);
+        btn.setAttribute("data-value", label(y));
+        btn.textContent = label(y);
+        panel.appendChild(btn);
+      });
+    });
+
+    const mobileListIds = ["mobile-menu-schedule", "mobile-menu-input", "mobile-menu-standings"];
+    mobileListIds.forEach((listId, i) => {
+      const ul = document.getElementById(listId);
+      const tabId = tabIds[i];
+      if (!ul || !tabId) return;
+      ul.innerHTML = "";
+      years.forEach((y) => {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "mobile-menu-item";
+        btn.setAttribute("data-tab", tabId);
+        btn.setAttribute("data-value", String(y));
+        btn.textContent = label(y);
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+    });
+  }
+
   async function initYearDropdowns() {
-    const ids = ["year-schedule", "year-input", "year-standings"];
+    const currentYear = new Date().getFullYear();
+    fillYearOptions([currentYear]); // show at least current year immediately
     try {
       const years = await fetchYears();
-      if (!Array.isArray(years) || years.length === 0) return;
-      const latest = Math.max.apply(null, years);
-      ids.forEach((id) => {
-        const select = document.getElementById(id);
-        if (!select) return;
-        select.innerHTML = "";
-        years.forEach((y) => {
-          const option = document.createElement("option");
-          option.value = String(y);
-          option.textContent = `${y}-${y + 1}`;
-          select.appendChild(option);
-        });
-        select.value = String(latest);
-      });
+      if (Array.isArray(years) && years.length > 0) {
+        fillYearOptions(years);
+      }
     } catch (err) {
-      console.error(err);
+      console.error("Failed to load years:", err);
     }
   }
 
@@ -407,18 +470,6 @@
       panel.classList.add("active");
       panel.hidden = false;
     }
-    const navRulesSelect = document.getElementById("nav-rules-select");
-    const navScheduleSelect = document.getElementById("nav-schedule-select");
-    const navInputSelect = document.getElementById("nav-input-select");
-    const navStandingsSelect = document.getElementById("nav-standings-select");
-    if (tabId === "rules") {
-      if (navRulesSelect) navRulesSelect.value = "";
-    } else if (navRulesSelect) {
-      navRulesSelect.value = "";
-    }
-    if (navScheduleSelect) navScheduleSelect.value = "";
-    if (navInputSelect) navInputSelect.value = "";
-    if (navStandingsSelect) navStandingsSelect.value = "";
     if (tabId === "standings") renderStandings();
     if (tabId === "schedule") renderSchedule();
     if (tabId === "rules") updateRulesContent();
@@ -647,38 +698,37 @@
   }
 
   document.querySelectorAll(".tab").forEach((btn) => {
-    if (btn.querySelector("select")) return;
+    if (btn.querySelector("select") || btn.querySelector(".tab-dropdown-panel") || btn.classList.contains("tab-dropdown-trigger")) return;
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
   (function initMobileMenu() {
     const toggle = document.getElementById("menu-toggle");
-    const overlay = document.getElementById("menu-overlay");
     const menu = document.getElementById("mobile-menu");
-    if (!toggle || !overlay || !menu) return;
+    const wrap = toggle && toggle.closest(".mobile-menu-wrap");
+    if (!toggle || !menu) return;
 
     function openMenu() {
       toggle.setAttribute("aria-expanded", "true");
       toggle.setAttribute("aria-label", "Close menu");
-      overlay.classList.add("is-open");
-      overlay.setAttribute("aria-hidden", "false");
+      menu.hidden = false;
       menu.classList.add("is-open");
-      document.body.classList.add("menu-open");
     }
     function closeMenu() {
       toggle.setAttribute("aria-expanded", "false");
       toggle.setAttribute("aria-label", "Open menu");
-      overlay.classList.remove("is-open");
-      overlay.setAttribute("aria-hidden", "true");
+      menu.hidden = true;
       menu.classList.remove("is-open");
-      document.body.classList.remove("menu-open");
     }
 
-    toggle.addEventListener("click", () => {
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (toggle.getAttribute("aria-expanded") === "true") closeMenu();
       else openMenu();
     });
-    overlay.addEventListener("click", closeMenu);
+    document.addEventListener("click", (e) => {
+      if (menu.classList.contains("is-open") && wrap && !wrap.contains(e.target)) closeMenu();
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && menu.classList.contains("is-open")) closeMenu();
     });
@@ -686,56 +736,64 @@
       if (window.matchMedia("(min-width: 769px)").matches && menu.classList.contains("is-open")) closeMenu();
     });
 
-    document.querySelectorAll(".mobile-menu-item").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const tabId = btn.dataset.tab;
-        if (tabId) switchTab(tabId);
-        const rulesView = btn.dataset.rulesView;
-        if (rulesView) {
-          currentRulesView = rulesView;
-          updateRulesContent();
-        }
-        closeMenu();
-      });
+    menu.addEventListener("click", (e) => {
+      const btn = e.target.closest(".mobile-menu-item");
+      if (!btn) return;
+      const tabId = btn.dataset.tab;
+      const value = btn.dataset.value;
+      if (value && tabId) setYearForTab(tabId, value);
+      if (tabId) switchTab(tabId);
+      const rulesView = btn.dataset.rulesView;
+      if (rulesView) {
+        currentRulesView = rulesView;
+        updateRulesContent();
+      }
+      closeMenu();
     });
   })();
 
-  function onNavDropdownChange(tabId, selectId, valueWhenSelected) {
-    const sel = document.getElementById(selectId);
-    if (!sel) return;
-    sel.addEventListener("change", () => {
-      const value = sel.value;
-      if (value === "" || value === valueWhenSelected) {
-        switchTab(tabId);
-        sel.value = "";
-      } else {
-        switchTab(tabId);
-        sel.value = "";
+  // Custom nav dropdowns (work in Cursor embedded browser and everywhere)
+  function closeAllNavDropdowns() {
+    document.querySelectorAll(".tab-dropdown-panel").forEach((p) => {
+      p.hidden = true;
+    });
+    document.querySelectorAll(".tab-dropdown-trigger").forEach((b) => {
+      b.setAttribute("aria-expanded", "false");
+    });
+    document.querySelectorAll(".tab-dropdown-wrap").forEach((w) => w.classList.remove("is-open"));
+  }
+  document.querySelectorAll(".tab-dropdown-trigger").forEach((trigger) => {
+    trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const panel = document.getElementById(trigger.id.replace("-trigger", "-panel"));
+      const wrap = trigger.closest(".tab-dropdown-wrap");
+      const isOpen = panel && !panel.hidden;
+      closeAllNavDropdowns();
+      if (!isOpen && panel && wrap) {
+        panel.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+        wrap.classList.add("is-open");
       }
     });
-  }
-
-  onNavDropdownChange("schedule", "nav-schedule-select", "2025-2026");
-  onNavDropdownChange("input", "nav-input-select", "2025-2026");
-  onNavDropdownChange("standings", "nav-standings-select", "2025-2026");
-
-  const navRulesSelect = document.getElementById("nav-rules-select");
-  if (navRulesSelect) {
-    navRulesSelect.addEventListener("change", () => {
-      const value = navRulesSelect.value;
-      if (value === "") {
-        switchTab("rules");
-        currentRulesView = "doubles";
+  });
+  document.addEventListener("click", (e) => {
+    const option = e.target.closest(".tab-dropdown-option");
+    if (option) {
+      e.stopPropagation();
+      const tabId = option.dataset.tab;
+      const value = option.dataset.value;
+      if (value && tabId) setYearForTab(tabId, value);
+      if (tabId) switchTab(tabId);
+      const rulesView = option.dataset.rulesView;
+      if (rulesView) {
+        currentRulesView = rulesView;
         updateRulesContent();
-        navRulesSelect.value = "";
-      } else {
-        currentRulesView = value;
-        switchTab("rules");
-        updateRulesContent();
-        navRulesSelect.value = "";
       }
-    });
-  }
+      closeAllNavDropdowns();
+    } else if (!e.target.closest(".tab-dropdown-trigger")) {
+      closeAllNavDropdowns();
+    }
+  });
 
   document.querySelectorAll(".standings-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchStandingsTab(btn.dataset.standings));
@@ -837,6 +895,18 @@
     }
   });
 
-  // Initialize season dropdowns from backend SEASON_YEARS
-  initYearDropdowns();
+  // Initialize season dropdowns from backend SEASON_YEARS (after DOM ready so mobile menu uls exist)
+  function runInitYearDropdowns() {
+    initYearDropdowns();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", runInitYearDropdowns);
+  } else {
+    runInitYearDropdowns();
+  }
+
+  // Register service worker for PWA install and offline shell
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  }
 })();
