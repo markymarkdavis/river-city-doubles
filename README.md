@@ -46,6 +46,8 @@ Then open [http://localhost:5000](http://localhost:5000). The Flask app serves t
 
 **Syncing with the hosted site:** Local and hosted each have their own database. To copy hosted data to local, run `python pull_from_hosted.py --host https://river-city-doubles.onrender.com`. To push your local score/schedule updates to the hosted site, run `python push_to_hosted.py --host https://river-city-doubles.onrender.com`.
 
+**Why aren’t scores updated (on the hosted site)?** Common causes: (1) **Different databases** — local and hosted don’t share data; push with `push_to_hosted.py` after local changes. (2) **Hosted DB is ephemeral** — On Render’s free tier the app filesystem (and `scores.db`) is usually wiped on every deploy or service restart, so pushed data can disappear. To keep scores on the hosted site, configure a [persistent disk](https://render.com/docs/disks) on Render and set `RCD_DB` to the mounted path (e.g. `/data/scores.db`). Then push again after any restart.
+
 ## Features
 
 - **Home** — Short description of the league (box vs handicap).

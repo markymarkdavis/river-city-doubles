@@ -17,6 +17,15 @@ CORS(
     resources={r"/api/*": {"origins": [o.strip() for o in cors_origins.split(",")] if cors_origins != "*" else "*"}},
 )
 
+
+@app.after_request
+def no_cache_api(response):
+    """Prevent caching of API responses so standings/schedule stay fresh."""
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 TEAMS_OPEN = [
     "Even Older and Grumpier",
     "All the right Angles",
