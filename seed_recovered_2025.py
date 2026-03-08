@@ -4,7 +4,7 @@ Use this to restore the latest scores after a deploy or DB reset (e.g. on Render
 
 Run from project root: python seed_recovered_2025.py
 
-Recovered: 29 scores (13 open, 9 main, 7 main week 7 added) as of recovery.
+Recovered from local scores.db: 29 scores (19 open, 10 main).
 """
 import os
 import sqlite3
