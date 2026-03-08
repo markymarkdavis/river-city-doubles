@@ -10,12 +10,37 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="header">
-    <div class="logo" aria-hidden="true">
-      <img src="doubles_logo.png" alt="River City Doubles Squash" />
-    </div>
-    <h1 class="site-title">River City Doubles Squash</h1>
-  </header>
+  <div class="top-bar">
+    <header class="header">
+      <div class="logo" aria-hidden="true">
+        <img src="doubles_logo.png" alt="River City Doubles Squash" />
+      </div>
+      <h1 class="site-title">River City Doubles Squash</h1>
+    </header>
+    <button type="button" class="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu" id="menu-toggle">
+      <span class="menu-toggle-bar"></span>
+      <span class="menu-toggle-bar"></span>
+      <span class="menu-toggle-bar"></span>
+    </button>
+  </div>
+
+  <div class="menu-overlay" id="menu-overlay" aria-hidden="true"></div>
+  <nav class="mobile-menu" id="mobile-menu" aria-label="Main navigation">
+    <ul class="mobile-menu-list">
+      <li><button type="button" class="mobile-menu-item" data-tab="home">Home</button></li>
+      <li><button type="button" class="mobile-menu-item" data-tab="schedule">Schedule</button></li>
+      <li><button type="button" class="mobile-menu-item" data-tab="input">Input Score</button></li>
+      <li><button type="button" class="mobile-menu-item" data-tab="standings">Standings</button></li>
+      <li>
+        <span class="mobile-menu-label">Rules</span>
+        <ul class="mobile-menu-sublist">
+          <li><button type="button" class="mobile-menu-item" data-tab="rules" data-rules-view="doubles">Doubles Squash rules</button></li>
+          <li><button type="button" class="mobile-menu-item" data-tab="rules" data-rules-view="handicap">Handicap League rules</button></li>
+        </ul>
+      </li>
+      <li><button type="button" class="mobile-menu-item" data-tab="fame">Wall of Fame</button></li>
+    </ul>
+  </nav>
 
   <nav class="tabs" role="tablist">
     <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
@@ -384,15 +409,57 @@
           </ul>
         </div>
         <div id="rules-content-handicap" class="rules-content" hidden>
-          <p class="rules-source">River City Doubles Handicap League rules. For the full document, see <a href="https://docs.google.com/document/d/1O3fXHjKslmGFPQFAv3idUjFcTI2L7ysOyIDZp_8HXOg/edit?tab=t.0" target="_blank" rel="noopener">River City Doubles Handicap League rules (Google Doc)</a>.</p>
-          <h3>Scoring</h3>
-          <p>Handicap league scoring (as used on this site’s standings):</p>
+          <p class="rules-source">River City Doubles Handicap League rules. Original: <a href="https://docs.google.com/document/d/1O3fXHjKslmGFPQFAv3idUjFcTI2L7ysOyIDZp_8HXOg/edit?tab=t.0" target="_blank" rel="noopener">Google Doc</a>.</p>
+
+          <h3>River City Doubles League</h3>
+          <p>The Doubles league this year will be a round robin of teams with two divisions that will be playing once a week at either ACAC or CCV.</p>
+
+          <h3>Rules</h3>
           <ul>
-            <li>1 point for playing the match</li>
-            <li>1 point for winning the match</li>
-            <li>1 point per game won</li>
+            <li>Each match will be self refereed.</li>
+            <li>Each team will have to put up their two players that will be playing 24 hours before the match. There will be a group of people who will determine the handicap for the teams in each matchup that night.</li>
+            <li>The scoring for each game will be first to 15, win by 1.</li>
+            <li>The way that the handicap will go is:
+              <ul>
+                <li>An initial handicap for the match will be determined by the small group based on the match-ups. Each proceeding game, the team that wins will start with one point fewer than they had the previous game, so if the first game where Team A started 0-0 and won, then they would start the next game -1 to 0.</li>
+              </ul>
+            </li>
+            <li>You must find a time to play before the following Sunday.</li>
+            <li>If a team is unable to host a team of 2 they must ask the commissioner for a substitute as soon as they can.</li>
           </ul>
-          <p>Standings are listed by total points. For full details, formats, and any local variations, refer to the official River City Doubles Handicap League rules document linked above.</p>
+
+          <h3>Points</h3>
+          <ul>
+            <li>Points will be decided by playing games and performance.</li>
+            <li>A team will get a point for playing the match and then will get a point for every game that they win, and an extra point for winning the match. So if a team wins 3-0 the winning team will get 5 points and the other team will get 1 point for playing the match.</li>
+          </ul>
+
+          <h3>Finals</h3>
+          <ul>
+            <li>The top 4 teams with the most points will play in the playoffs. If there’s a tie the tiebreaker will be head to head first and then games lost as second tiebreaker if the two teams didn’t play.</li>
+            <li>The semi-finals and finals will be played at ACAC on March 5th, and the finals will be on March 6th.</li>
+            <li>The schedule on March 12th will be:
+              <ul>
+                <li>5pm: 2nd place in B division vs 3rd place in B division</li>
+                <li>6pm: 1st place in A division vs 4th place in A division</li>
+                <li>7pm: 2nd place in A division vs 3rd place in A division</li>
+              </ul>
+            </li>
+            <li>The schedule on March 13th will be:
+              <ul>
+                <li>6pm: 1st place in B division vs winner of 2/3 game</li>
+                <li>7pm: winner of 1/4 game vs winner of 2/3 game</li>
+              </ul>
+            </li>
+          </ul>
+
+          <h3>Teams</h3>
+          <ul>
+            <li>Teams will be chosen in a draft by all of the captains in the league. This is not an ACAC vs CCV league, each player is chosen individually.</li>
+            <li>The teams will be made up of 4 players to make sure that each team will be able to host a team of 2 every week they have a match.</li>
+          </ul>
+
+          <p class="rules-standings-note">Standings on this site use the same points: 1 for playing, 1 per game won, and 1 for winning the match.</p>
         </div>
       </div>
     </section>
