@@ -244,6 +244,12 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 0 4px;
+  position: relative;
+  z-index: 1;
+}
+/* When a nav dropdown is open, raise it so the native options list isn't clipped */
+.tab-dropdown-wrap:focus-within {
+  z-index: 100;
 }
 
 .tab-dropdown-wrap.active .tab-dropdown-select {
