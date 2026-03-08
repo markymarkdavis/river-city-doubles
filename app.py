@@ -208,6 +208,12 @@ def points_for_team(games_won: int, is_winner: bool) -> int:
     return pts + games_won
 
 
+@app.route("/health")
+def health():
+    """Lightweight endpoint for Render health checks and keep-alive pings (e.g. UptimeRobot every 5–10 min to avoid free-tier spin-down)."""
+    return jsonify({"status": "ok"}), 200
+
+
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")

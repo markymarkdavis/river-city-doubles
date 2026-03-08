@@ -27,6 +27,12 @@ window.RCD_API_BASE = "https://your-flask-service.onrender.com";
 
 If you’re using SQLite and need persistence, configure a persistent disk and set `RCD_DB` to that mounted path.
 
+**Render free tier: site “hangs” or times out**  
+Free web services spin down after ~15 minutes of inactivity. The first request after that triggers a **cold start** (often 30–90 seconds), so the site can look like it’s hanging. Options:
+
+1. **Wait it out** — Reload after 1–2 minutes; the instance will wake and then respond quickly.
+2. **Keep the service awake** — Use a free uptime monitor (e.g. [UptimeRobot](https://uptimerobot.com)) to ping your site every 5–10 minutes. Add a monitor for `https://your-app.onrender.com/health`. The app exposes `/health` for this; it returns quickly and does no DB work. That way the service rarely sleeps and most visits are fast.
+
 # River City Doubles
 
 Richmond doubles squash league: box league and handicap league (open & main).

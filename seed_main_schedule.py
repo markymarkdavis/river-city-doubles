@@ -22,7 +22,7 @@ ROWS = [
     (5, "Feb 15–Feb 21", "The Double Troubles", "The Boast Beasts", None, "Heidi Stevenson and Bob Reynolds", "Nick Farrell and Deesh Bhattal", "0-7", 0, 3),
     (5, "Feb 15–Feb 21", "Drop Shotz", "Tin and Tonic", None, "Jack Hager and Austin Brockenbough", "Trey Packard and Billy Miller", "7-0", 3, 2),
     (6, "Feb 22–Feb 28", "The Double Troubles", "Tin and Tonic", None, "Bob Reynolds and Peter Thacker", "Trey Packard and Billy Miller", "0-1", 3, 2),
-    (6, "Feb 22–Feb 28", "Drop Shotz", "The Boast Beasts", None, "Jack Hager and Robert Gentil", "Skye Phillips and Nick Farrell", "0-5", 3, 1),
+    (6, "Feb 22–Feb 28", "The Boast Beasts", "Drop Shotz", None, "Skye Phillips and Nick Farrell", "Jack Hager and Robert Gentil", "0-5", 3, 1),
     (7, "Mar 1–Mar 7", "The Double Troubles", "Drop Shotz", None, None, None, None, None, None),
     (7, "Mar 1–Mar 7", "Tin and Tonic", "The Boast Beasts", None, "Billy Miller and Alan Stone", "Skye Phillips and Nick Farrell", "0-8", 3, 2),
 ]
