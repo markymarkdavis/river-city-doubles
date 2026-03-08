@@ -242,6 +242,31 @@ def get_years():
     return jsonify(SEASON_YEARS)
 
 
+def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):
+    """
+    Normalize (team1, team2) and corresponding fields so order doesn't matter when inputting.
+    Prefer schedule order if a schedule row exists; otherwise use alphabetical team order.
+    Returns (team1, team2, games1, games2, team1_players, team2_players, h1, h2).
+    """
+    with get_db() as conn:
+        sched = conn.execute(
+            """SELECT team1, team2 FROM schedule
+               WHERE level = ? AND week = ? AND (year = ? OR (year IS NULL AND ? IS NULL))
+                 AND ((team1 = ? AND team2 = ?) OR (team1 = ? AND team2 = ?))""",
+            (level, week, year, year, team1, team2, team2, team1),
+        ).fetchone()
+    if sched:
+        canon1, canon2 = sched["team1"], sched["team2"]
+        if (team1, team2) == (canon2, canon1):
+            return (canon1, canon2, games2, games1, team2_players, team1_players, h2, h1)
+        return (canon1, canon2, games1, games2, team1_players, team2_players, h1, h2)
+    # No schedule row: use alphabetical order so the same match is always stored the same way
+    t1, t2 = sorted([team1, team2])
+    if (team1, team2) == (t2, t1):
+        return (t1, t2, games2, games1, team2_players, team1_players, h2, h1)
+    return (t1, t2, games1, games2, team1_players, team2_players, h1, h2)
+
+
 @app.route("/api/scores", methods=["POST"])
 def post_score():
     data = request.get_json() or {}
@@ -254,7 +279,6 @@ def post_score():
     games2 = int(data.get("games2", 0))
     h1 = (data.get("handicap_team1") or "").strip() or None
     h2 = (data.get("handicap_team2") or "").strip() or None
-    handicap = " / ".join(p for p in (h1, h2) if p) or None
     team1_players = (data.get("team1_players") or "").strip() or None
     team2_players = (data.get("team2_players") or "").strip() or None
     year = data.get("year")
@@ -277,28 +301,49 @@ def post_score():
     if games1 + games2 > 5:
         return jsonify({"error": "Best of 5: total games cannot exceed 5"}), 400
 
+    # Normalize so order of teams (and thus players/handicaps) doesn't matter
+    if level in ("open", "main"):
+        team1, team2, games1, games2, team1_players, team2_players, h1, h2 = _normalize_team_order(
+            level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2
+        )
+    handicap = " / ".join(p for p in (h1, h2) if p) or None
     score_str = f"{games1}-{games2}"
     winner = team1 if games1 > games2 else (team2 if games2 > games1 else None)
 
     with get_db() as conn:
-        conn.execute(
-            """INSERT INTO scores (league, level, week, handicap, team1, team2, games1, games2, team1_players, team2_players, year)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (league, level, week, handicap, team1, team2, games1, games2, team1_players, team2_players, year),
-        )
+        # Upsert score: update if same match (either order) already exists for this week
+        existing = conn.execute(
+            """SELECT id, team1, team2 FROM scores
+               WHERE league = ? AND level = ? AND week = ? AND (year = ? OR (year IS NULL AND ? IS NULL))
+                 AND ((team1 = ? AND team2 = ?) OR (team1 = ? AND team2 = ?))""",
+            (league, level, week, year, year, team1, team2, team2, team1),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE scores SET handicap = ?, team1 = ?, team2 = ?, games1 = ?, games2 = ?,
+                   team1_players = ?, team2_players = ?, year = ?
+                   WHERE id = ?""",
+                (handicap, team1, team2, games1, games2, team1_players, team2_players, year, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO scores (league, level, week, handicap, team1, team2, games1, games2, team1_players, team2_players, year)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (league, level, week, handicap, team1, team2, games1, games2, team1_players, team2_players, year),
+            )
         conn.commit()
         # Upsert schedule row for this match so spreadsheet shows players, score, winner
         if level in ("open", "main"):
-            existing = conn.execute(
-                """SELECT id FROM schedule WHERE level = ? AND week = ? AND team1 = ? AND team2 = ? AND (year = ? OR (year IS NULL AND ? IS NULL))""",
-                (level, week, team1, team2, year, year),
+            existing_sched = conn.execute(
+                """SELECT id FROM schedule WHERE level = ? AND week = ? AND ((team1 = ? AND team2 = ?) OR (team1 = ? AND team2 = ?)) AND (year = ? OR (year IS NULL AND ? IS NULL))""",
+                (level, week, team1, team2, team2, team1, year, year),
             ).fetchone()
             date_range = WEEK_DATE_RANGES.get(week, "")
-            if existing:
+            if existing_sched:
                 conn.execute(
-                    """UPDATE schedule SET date_range = ?, team1_players = ?, team2_players = ?, handicap = ?, score = ?, winner = ?, year = ?
+                    """UPDATE schedule SET date_range = ?, team1 = ?, team2 = ?, team1_players = ?, team2_players = ?, handicap = ?, score = ?, winner = ?, year = ?
                        WHERE id = ?""",
-                    (date_range, team1_players, team2_players, handicap, score_str, winner, year, existing["id"]),
+                    (date_range, team1, team2, team1_players, team2_players, handicap, score_str, winner, year, existing_sched["id"]),
                 )
             else:
                 conn.execute(
@@ -363,14 +408,17 @@ def get_schedule():
         ensure_db_ready()
         with get_db() as conn:
             rows = conn.execute(
-                """SELECT week, date_range, team1, team2, bye, team1_players, team2_players,
+                """SELECT id, week, date_range, team1, team2, bye, team1_players, team2_players,
                           handicap, score, winner FROM schedule WHERE level = ? AND (year = ? OR year IS NULL) ORDER BY week, id""",
                 (level, year),
             ).fetchall()
     except sqlite3.Error as e:
         return jsonify({"error": "Database error", "detail": str(e)}), 500
-    out = [
-        {
+    # Deduplicate: same (week, team pair) can appear twice; prefer the row that has a score
+    by_key = {}
+    for r in rows:
+        key = (r["week"], tuple(sorted([(r["team1"] or ""), (r["team2"] or "")])))
+        row_data = {
             "week": r["week"],
             "date_range": (r["date_range"] or "").strip() or WEEK_DATE_RANGES.get(r["week"], ""),
             "team1": r["team1"] or "",
@@ -382,8 +430,11 @@ def get_schedule():
             "score": r["score"] or "",
             "winner": r["winner"] or "",
         }
-        for r in rows
-    ]
+        existing = by_key.get(key)
+        if existing is None or (row_data["score"] and not existing["score"]):
+            by_key[key] = row_data
+    out = list(by_key.values())
+    out.sort(key=lambda x: (x["week"], x["team1"], x["team2"]))
     return jsonify(out)
 
 

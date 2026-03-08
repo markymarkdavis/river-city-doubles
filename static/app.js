@@ -651,6 +651,55 @@
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
   });
 
+  (function initMobileMenu() {
+    const toggle = document.getElementById("menu-toggle");
+    const overlay = document.getElementById("menu-overlay");
+    const menu = document.getElementById("mobile-menu");
+    if (!toggle || !overlay || !menu) return;
+
+    function openMenu() {
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.setAttribute("aria-label", "Close menu");
+      overlay.classList.add("is-open");
+      overlay.setAttribute("aria-hidden", "false");
+      menu.classList.add("is-open");
+      document.body.classList.add("menu-open");
+    }
+    function closeMenu() {
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.setAttribute("aria-label", "Open menu");
+      overlay.classList.remove("is-open");
+      overlay.setAttribute("aria-hidden", "true");
+      menu.classList.remove("is-open");
+      document.body.classList.remove("menu-open");
+    }
+
+    toggle.addEventListener("click", () => {
+      if (toggle.getAttribute("aria-expanded") === "true") closeMenu();
+      else openMenu();
+    });
+    overlay.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && menu.classList.contains("is-open")) closeMenu();
+    });
+    window.addEventListener("resize", () => {
+      if (window.matchMedia("(min-width: 769px)").matches && menu.classList.contains("is-open")) closeMenu();
+    });
+
+    document.querySelectorAll(".mobile-menu-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tabId = btn.dataset.tab;
+        if (tabId) switchTab(tabId);
+        const rulesView = btn.dataset.rulesView;
+        if (rulesView) {
+          currentRulesView = rulesView;
+          updateRulesContent();
+        }
+        closeMenu();
+      });
+    });
+  })();
+
   function onNavDropdownChange(tabId, selectId, valueWhenSelected) {
     const sel = document.getElementById(selectId);
     if (!sel) return;
