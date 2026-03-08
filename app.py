@@ -225,6 +225,12 @@ def open_division_image():
     return send_file(path, mimetype="image/jpeg")
 
 
+@app.route("/manifest.webmanifest")
+def serve_manifest():
+    path = os.path.join(STATIC_DIR, "manifest.webmanifest")
+    return send_file(path, mimetype="application/manifest+json")
+
+
 @app.route("/api/players")
 def get_players():
     return jsonify(PLAYERS)
@@ -480,4 +486,13 @@ def post_schedule():
 
 if __name__ == "__main__":
     init_db()
+    try:
+        with get_db() as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM scores WHERE league = ? AND level IN ('open', 'main')",
+                ("handicap",),
+            ).fetchone()[0]
+        print(f"Using database: {DB_PATH} ({n} handicap scores)")
+    except Exception as e:
+        print(f"Using database: {DB_PATH} (check failed: {e})")
     app.run(debug=True, port=5000)

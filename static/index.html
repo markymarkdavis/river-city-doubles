@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="River City Doubles" />
   <title>River City Doubles League</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/doubles_logo.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
@@ -17,20 +23,33 @@
       </div>
       <h1 class="site-title">River City Doubles Squash</h1>
     </header>
-    <button type="button" class="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu" id="menu-toggle">
-      <span class="menu-toggle-bar"></span>
-      <span class="menu-toggle-bar"></span>
-      <span class="menu-toggle-bar"></span>
-    </button>
-  </div>
-
-  <div class="menu-overlay" id="menu-overlay" aria-hidden="true"></div>
-  <nav class="mobile-menu" id="mobile-menu" aria-label="Main navigation">
+    <div class="mobile-menu-wrap">
+      <button type="button" class="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu" id="menu-toggle">
+        <span class="menu-toggle-bar"></span>
+        <span class="menu-toggle-bar"></span>
+        <span class="menu-toggle-bar"></span>
+      </button>
+      <nav class="mobile-menu" id="mobile-menu" aria-label="Main navigation" hidden>
     <ul class="mobile-menu-list">
       <li><button type="button" class="mobile-menu-item" data-tab="home">Home</button></li>
-      <li><button type="button" class="mobile-menu-item" data-tab="schedule">Schedule</button></li>
-      <li><button type="button" class="mobile-menu-item" data-tab="input">Input Score</button></li>
-      <li><button type="button" class="mobile-menu-item" data-tab="standings">Standings</button></li>
+      <li>
+        <span class="mobile-menu-label">Schedule</span>
+        <ul class="mobile-menu-sublist" id="mobile-menu-schedule">
+          <li><button type="button" class="mobile-menu-item" data-tab="schedule" data-value="2025">2025-2026</button></li>
+        </ul>
+      </li>
+      <li>
+        <span class="mobile-menu-label">Input Score</span>
+        <ul class="mobile-menu-sublist" id="mobile-menu-input">
+          <li><button type="button" class="mobile-menu-item" data-tab="input" data-value="2025">2025-2026</button></li>
+        </ul>
+      </li>
+      <li>
+        <span class="mobile-menu-label">Standings</span>
+        <ul class="mobile-menu-sublist" id="mobile-menu-standings">
+          <li><button type="button" class="mobile-menu-item" data-tab="standings" data-value="2025">2025-2026</button></li>
+        </ul>
+      </li>
       <li>
         <span class="mobile-menu-label">Rules</span>
         <ul class="mobile-menu-sublist">
@@ -40,35 +59,37 @@
       </li>
       <li><button type="button" class="mobile-menu-item" data-tab="fame">Wall of Fame</button></li>
     </ul>
-  </nav>
+      </nav>
+    </div>
+  </div>
 
   <nav class="tabs" role="tablist">
     <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
-    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="schedule" id="tab-schedule-wrap">
-      <select id="nav-schedule-select" class="tab-dropdown-select" aria-label="Schedule">
-        <option value="">Schedule</option>
-        <option value="2025-2026">2025-2026</option>
-      </select>
-    </span>
-    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="input" id="tab-input-wrap">
-      <select id="nav-input-select" class="tab-dropdown-select" aria-label="Input Score">
-        <option value="">Input Score</option>
-        <option value="2025-2026">2025-2026</option>
-      </select>
-    </span>
-    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="standings" id="tab-standings-wrap">
-      <select id="nav-standings-select" class="tab-dropdown-select" aria-label="Standings">
-        <option value="">Standings</option>
-        <option value="2025-2026">2025-2026</option>
-      </select>
-    </span>
-    <span class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="rules" id="tab-rules-wrap">
-      <select id="nav-rules-select" class="tab-dropdown-select" aria-label="Rules">
-        <option value="">Rules</option>
-        <option value="doubles">Doubles Squash rules</option>
-        <option value="handicap">River City Doubles Handicap Rules</option>
-      </select>
-    </span>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="schedule" id="tab-schedule-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-schedule-trigger" aria-label="Schedule" aria-haspopup="listbox" aria-expanded="false">Schedule ▾</button>
+      <div class="tab-dropdown-panel" id="nav-schedule-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="schedule" data-value="2025-2026">2025-2026</button>
+      </div>
+    </div>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="input" id="tab-input-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-input-trigger" aria-label="Input Score" aria-haspopup="listbox" aria-expanded="false">Input Score ▾</button>
+      <div class="tab-dropdown-panel" id="nav-input-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="input" data-value="2025-2026">2025-2026</button>
+      </div>
+    </div>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="standings" id="tab-standings-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-standings-trigger" aria-label="Standings" aria-haspopup="listbox" aria-expanded="false">Standings ▾</button>
+      <div class="tab-dropdown-panel" id="nav-standings-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="standings" data-value="2025-2026">2025-2026</button>
+      </div>
+    </div>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="rules" id="tab-rules-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-rules-trigger" aria-label="Rules" aria-haspopup="listbox" aria-expanded="false">Rules ▾</button>
+      <div class="tab-dropdown-panel" id="nav-rules-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="rules" data-rules-view="doubles">Doubles Squash rules</button>
+        <button type="button" class="tab-dropdown-option" data-tab="rules" data-rules-view="handicap">River City Doubles Handicap Rules</button>
+      </div>
+    </div>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="fame">Wall of Fame</button>
   </nav>
 
