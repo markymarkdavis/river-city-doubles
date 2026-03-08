@@ -44,6 +44,8 @@ python app.py
 
 Then open [http://localhost:5000](http://localhost:5000). The Flask app serves the UI and stores scores in a SQLite database (`scores.db` in the project root, or path in `RCD_DB`).
 
+**Syncing with the hosted site:** Local and hosted each have their own database. To copy hosted data to local, run `python pull_from_hosted.py --host https://river-city-doubles.onrender.com`. To push your local score/schedule updates to the hosted site, run `python push_to_hosted.py --host https://river-city-doubles.onrender.com`.
+
 ## Features
 
 - **Home** — Short description of the league (box vs handicap).
