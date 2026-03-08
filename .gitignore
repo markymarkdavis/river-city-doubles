@@ -2,4 +2,6 @@ venv/
 __pycache__/
 *.pyc
 scores.db
+scores.db.backup
+scores_backup_*.db
 .env
