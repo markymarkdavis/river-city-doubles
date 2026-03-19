@@ -19,7 +19,14 @@
         "Backend API not configured for GitHub Pages. Set window.RCD_API_BASE in static/config.js (or use ?api=https://your-backend) and reload."
       );
     }
-    return path; // same-origin (local Flask)
+    return path; // same-origin (local Flask or Render)
+  }
+
+  const FETCH_TIMEOUT_MS = 90000; // free-tier cold start can take 1–2 min
+  function fetchWithTimeout(url, options) {
+    const ctrl = new AbortController();
+    const id = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+    return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(id));
   }
 
   const TEAMS_OPEN = [
@@ -345,11 +352,14 @@
 
   async function fetchStandings(league, level) {
     const year = getYearFrom("year-standings");
-    const res = await fetch(
-      `${apiUrl(`/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}`)}?year=${year}`
-    );
+    const url = `${apiUrl(`/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}`)}?year=${year}`;
+    const res = await fetchWithTimeout(url).catch((e) => {
+      if (e.name === "AbortError") throw new Error("Request timed out. The server may be waking up; try again in a minute.");
+      throw e;
+    });
     if (!res.ok) throw new Error("Failed to load standings");
-    return res.json();
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   }
 
   function getYearFrom(selectId) {
@@ -360,9 +370,10 @@
   }
 
   async function fetchYears() {
-    const res = await fetch(apiUrl("/api/years"));
-    if (!res.ok) throw new Error("Failed to load seasons");
-    return res.json();
+    const res = await fetchWithTimeout(apiUrl("/api/years")).catch(() => null);
+    if (!res || !res.ok) throw new Error("Failed to load seasons");
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   }
 
   const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings"];
@@ -439,8 +450,7 @@
   }
 
   async function initYearDropdowns() {
-    const currentYear = new Date().getFullYear();
-    fillYearOptions([currentYear]); // show at least current year immediately
+    fillYearOptions([2025]); // default to 2025-2026 season until API responds
     try {
       const years = await fetchYears();
       if (Array.isArray(years) && years.length > 0) {
@@ -491,11 +501,14 @@
       return null;
     }
     const year = getYearFrom("year-schedule");
-    const res = await fetch(
-      `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`
-    );
+    const url = `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`;
+    const res = await fetchWithTimeout(url).catch((e) => {
+      if (e.name === "AbortError") throw new Error("Request timed out. The server may be waking up; try again in a minute.");
+      throw e;
+    });
     if (!res.ok) throw new Error("Failed to load schedule");
-    return res.json();
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
   }
 
   function switchScheduleTab(level) {
@@ -520,7 +533,7 @@
     tbody.innerHTML = "";
     try {
       const rows = await fetchSchedule(level);
-      if (rows.length === 0) {
+      if (!rows || rows.length === 0) {
         emptyEl.hidden = false;
         return;
       }
@@ -541,8 +554,8 @@
         `;
         tbody.appendChild(tr);
       });
-    } catch {
-      emptyEl.textContent = "Unable to load schedule. Is the server running?";
+    } catch (err) {
+      emptyEl.textContent = err && err.message ? err.message : "Unable to load schedule. Is the server running?";
       emptyEl.hidden = false;
     }
   }
@@ -684,9 +697,10 @@
         `;
         tbody.appendChild(tr);
       });
-    } catch {
+    } catch (err) {
       const tr = document.createElement("tr");
-      tr.innerHTML = '<td colspan="6">Unable to load standings. Is the server running?</td>';
+      const msg = err && err.message ? err.message : "Unable to load standings. Is the server running?";
+      tr.innerHTML = `<td colspan="6">${escapeHtml(msg)}</td>`;
       tbody.appendChild(tr);
     }
   }
