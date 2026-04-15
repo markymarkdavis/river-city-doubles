@@ -7,12 +7,13 @@ import sqlite3
 import smtplib
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
+ASSET_VERSION = os.environ.get("RCD_ASSET_VERSION", datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
 
 cors_origins = os.environ.get("RCD_CORS_ORIGINS", "*").strip()
 CORS(
@@ -517,7 +518,24 @@ def health():
 
 @app.route("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    path = os.path.join(STATIC_DIR, "index.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read().replace("__ASSET_VERSION__", ASSET_VERSION)
+    resp = Response(html, mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/sw.js")
+def service_worker():
+    path = os.path.join(STATIC_DIR, "sw.js")
+    with open(path, "r", encoding="utf-8") as f:
+        js = f.read().replace("__ASSET_VERSION__", ASSET_VERSION)
+    resp = Response(js, mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/main_division_handicap_2025.JPG")

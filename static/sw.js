@@ -1,13 +1,15 @@
 /* River City Doubles — service worker for PWA install and offline shell */
-const CACHE_NAME = "rcd-v1";
+// Bump this on each deploy to evict old caches automatically.
+const ASSET_VERSION = "__ASSET_VERSION__";
+const CACHE_NAME = `rcd-${ASSET_VERSION}`;
 const SHELL_URLS = [
   "/",
   "/index.html",
-  "/styles.css",
-  "/app.js",
-  "/config.js",
+  `/styles.css?v=${ASSET_VERSION}`,
+  `/app.js?v=${ASSET_VERSION}`,
+  `/config.js?v=${ASSET_VERSION}`,
   "/doubles_logo.png",
-  "/manifest.webmanifest",
+  `/manifest.webmanifest?v=${ASSET_VERSION}`,
 ];
 
 self.addEventListener("install", (event) => {
