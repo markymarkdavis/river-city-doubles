@@ -684,7 +684,7 @@ body {
   border-color: var(--accent);
 }
 
-.box-schedule-players {
+.box-schedule-team-players {
   min-width: 12rem;
   max-width: 22rem;
   white-space: normal;

@@ -189,7 +189,8 @@
                       <th>Dates</th>
                       <th>Team 1</th>
                       <th>Team 2</th>
-                      <th>Players</th>
+                      <th>Team 1 Players</th>
+                      <th>Team 2 Players</th>
                       <th class="box-player-header" data-letter="A">A</th>
                       <th class="box-player-header" data-letter="B">B</th>
                       <th class="box-player-header" data-letter="C">C</th>
@@ -220,7 +221,7 @@
             </select>
           </div>
           <div class="form-row">
-            <label for="level">Level</label>
+            <label for="level" id="level-label">Level</label>
             <select id="level" name="level" required>
               <option value="">Select level</option>
               <option value="open">Open</option>
@@ -268,11 +269,11 @@
             <label for="team2_player2">Team 2 Player 2</label>
             <input type="text" id="team2_player2" name="team2_player2" placeholder="Player name" />
           </div>
-          <div class="form-row">
+          <div class="form-row" id="handicap-row-team1">
             <label for="handicap_team1">Team 1 Handicap</label>
             <input type="text" id="handicap_team1" name="handicap_team1" placeholder="Optional" />
           </div>
-          <div class="form-row">
+          <div class="form-row" id="handicap-row-team2">
             <label for="handicap_team2">Team 2 Handicap</label>
             <input type="text" id="handicap_team2" name="handicap_team2" placeholder="Optional" />
           </div>

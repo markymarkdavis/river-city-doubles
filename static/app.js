@@ -122,6 +122,7 @@
       F: "Ned Sinnott",
     },
   };
+  const BOX_TEAMS = Object.keys(BOX_PLAYERS || {});
 
   // Full 15 matchups from the Schedule tab (all boxes follow this order).
   const FULL_BOX_MATCHUPS = [
@@ -141,6 +142,15 @@
     { matchup: "A & F vs B & E", dates: "Feb 15–21" },
     { matchup: "C & E vs D & F", dates: "Feb 22–28" },
   ];
+  const HANDICAP_WEEK_OPTIONS = [
+    { value: "1", label: "1 — Jan 18–Jan 24" },
+    { value: "2", label: "2 — Jan 25–Jan 31" },
+    { value: "3", label: "3 — Feb 1–Feb 7" },
+    { value: "4", label: "4 — Feb 8–Feb 14" },
+    { value: "5", label: "5 — Feb 15–Feb 21" },
+    { value: "6", label: "6 — Feb 22–Feb 28" },
+    { value: "7", label: "7 — Mar 1–Mar 7" },
+  ];
 
   // Parse "X & Y vs Z & W" -> { team1: [X,Y], team2: [Z,W] }
   function parseMatchup(matchup) {
@@ -149,14 +159,16 @@
     return { team1: [m[1], m[2]], team2: [m[3], m[4]] };
   }
 
-  // Expand matchup letters to player names for the active box.
-  function formatMatchupPlayerNames(team, matchup) {
+  // Expand matchup letters to player names for the active box, by side.
+  function getMatchupPlayerNamesBySide(team, matchup) {
     const { team1: t1, team2: t2 } = parseMatchup(matchup);
     const p = BOX_PLAYERS[team];
-    if (!p || t1.length !== 2 || t2.length !== 2) return matchup;
+    if (!p || t1.length !== 2 || t2.length !== 2) {
+      return { team1: "", team2: "" };
+    }
     const side = (letters) =>
       letters.map((L) => escapeHtml(p[L] || L)).join(" & ");
-    return `${side(t1)} vs ${side(t2)}`;
+    return { team1: side(t1), team2: side(t2) };
   }
 
   // Derive per-player scores from matchup and team totals. Sitting players get "X".
@@ -315,8 +327,7 @@
     return list.filter((t) => !TEAMS_EXCLUDED.has(t));
   }
 
-  function fillTeamDropdowns(level) {
-    const teams = getTeamsForLevel(level);
+  function fillTeamDropdownOptions(teams) {
     const option = (value, label) => {
       const o = document.createElement("option");
       o.value = value;
@@ -335,13 +346,147 @@
     });
   }
 
+  function fillLevelOptionsForLeague(league) {
+    const levelEl = document.getElementById("level");
+    if (!levelEl) return;
+    levelEl.innerHTML = "";
+    const add = (v, txt) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = txt;
+      levelEl.appendChild(o);
+    };
+    if (league === "box") {
+      add("", "Select box");
+      BOX_TEAMS.forEach((b) => add(b, b));
+    } else {
+      add("", "Select level");
+      add("open", "Open");
+      add("main", "Main");
+    }
+  }
+
+  function fillSingleTeamSideOptions(team1Text, team2Text) {
+    const option = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label || value;
+      return o;
+    };
+    const team1 = document.getElementById("team1");
+    const team2 = document.getElementById("team2");
+    team1.innerHTML = "";
+    team2.innerHTML = "";
+    team1.appendChild(option(team1Text, team1Text));
+    team2.appendChild(option(team2Text, team2Text));
+  }
+
+  function fillWeekOptions(league) {
+    const weekEl = document.getElementById("week");
+    if (!weekEl) return;
+    weekEl.innerHTML = "";
+    const addOpt = (v, txt) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = txt;
+      weekEl.appendChild(o);
+    };
+    addOpt("", "Select week");
+    if (league === "box") {
+      FULL_BOX_MATCHUPS.forEach((m, idx) => {
+        addOpt(String(idx + 1), `${idx + 1} — ${m.dates}`);
+      });
+    } else {
+      HANDICAP_WEEK_OPTIONS.forEach((w) => addOpt(w.value, w.label));
+    }
+  }
+
+  function fillTeamDropdowns(level) {
+    fillTeamDropdownOptions(getTeamsForLevel(level));
+  }
+
+  function fillBoxTeamDropdowns() {
+    fillTeamDropdownOptions(BOX_TEAMS);
+  }
+
+  function clearScoreFormPlayers() {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    form.team1_player1.value = "";
+    form.team1_player2.value = "";
+    form.team2_player1.value = "";
+    form.team2_player2.value = "";
+  }
+
+  function updateHandicapFieldsVisibility() {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    const isBox = form.league.value === "box";
+    const h1 = document.getElementById("handicap_team1");
+    const h2 = document.getElementById("handicap_team2");
+    const row1 = document.getElementById("handicap-row-team1");
+    const row2 = document.getElementById("handicap-row-team2");
+    if (!h1 || !h2) return;
+    [h1, h2].forEach((el) => {
+      el.disabled = isBox;
+      if (isBox) el.value = "";
+    });
+    if (row1) row1.style.display = isBox ? "none" : "";
+    if (row2) row2.style.display = isBox ? "none" : "";
+  }
+
+  function autoPopulateBoxPlayersInForm() {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    if (form.league.value !== "box") return;
+    const weekNum = parseInt(form.week.value, 10);
+    const matchup = Number.isNaN(weekNum) ? null : FULL_BOX_MATCHUPS[weekNum - 1];
+    const box = form.level.value;
+    if (!matchup || !box) {
+      clearScoreFormPlayers();
+      return;
+    }
+    const parsed = parseMatchup(matchup.matchup);
+    const p1 = BOX_PLAYERS[box] || {};
+    const p2 = BOX_PLAYERS[box] || {};
+    fillSingleTeamSideOptions(`${parsed.team1[0]} & ${parsed.team1[1]}`, `${parsed.team2[0]} & ${parsed.team2[1]}`);
+    form.team1_player1.value = parsed.team1[0] ? (p1[parsed.team1[0]] || "") : "";
+    form.team1_player2.value = parsed.team1[1] ? (p1[parsed.team1[1]] || "") : "";
+    form.team2_player1.value = parsed.team2[0] ? (p2[parsed.team2[0]] || "") : "";
+    form.team2_player2.value = parsed.team2[1] ? (p2[parsed.team2[1]] || "") : "";
+  }
+
+  function updateScoreFormTeamsFromLeagueAndLevel() {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    const levelLabel = document.getElementById("level-label");
+    if (form.league.value === "box") {
+      if (levelLabel) levelLabel.textContent = "Box";
+      fillWeekOptions("box");
+      form.level.disabled = false;
+      form.level.required = true;
+      form.team1.disabled = true;
+      form.team2.disabled = true;
+      autoPopulateBoxPlayersInForm();
+      return;
+    }
+    if (levelLabel) levelLabel.textContent = "Level";
+    fillWeekOptions("handicap");
+    form.level.disabled = false;
+    form.level.required = true;
+    form.team1.disabled = false;
+    form.team2.disabled = false;
+    fillTeamDropdowns(form.level.value);
+  }
+
   async function postScore(entry) {
+    const levelForApi = entry.league === "box" ? "open" : entry.level;
     const res = await fetch(apiUrl("/api/scores"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league: entry.league,
-        level: entry.level,
+        level: levelForApi,
         week: Number(entry.week),
         year: getYearFrom("year-input"),
         handicap_team1: entry.handicap_team1 || undefined,
@@ -638,12 +783,14 @@
       const d = escapeHtml(String(row.d ?? ""));
       const e = escapeHtml(String(row.e ?? ""));
       const f = escapeHtml(String(row.f ?? ""));
+      const sides = getMatchupPlayerNamesBySide(team, row.matchup);
       tr.innerHTML = `
         <td>${escapeHtml(row.matchup)}</td>
         <td>${escapeHtml(row.dates)}</td>
         <td>${row.team1}</td>
         <td>${row.team2}</td>
-        <td class="box-schedule-players">${formatMatchupPlayerNames(team, row.matchup)}</td>
+        <td class="box-schedule-team-players">${sides.team1}</td>
+        <td class="box-schedule-team-players">${sides.team2}</td>
         <td>${a}</td>
         <td>${b}</td>
         <td>${c}</td>
@@ -670,6 +817,7 @@
       <td></td>
       <td><strong>${total1}</strong></td>
       <td><strong>${total2}</strong></td>
+      <td></td>
       <td></td>
       <td><strong>${playerTotals.A}</strong></td>
       <td><strong>${playerTotals.B}</strong></td>
@@ -881,10 +1029,37 @@
     });
   });
 
-  document.getElementById("level").addEventListener("change", () => {
-    const level = document.getElementById("level").value;
-    fillTeamDropdowns(level);
+  document.getElementById("league").addEventListener("change", () => {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    if (form.league.value === "box") {
+      fillLevelOptionsForLeague("box");
+      fillWeekOptions("box");
+      fillSingleTeamSideOptions("", "");
+      clearScoreFormPlayers();
+    } else {
+      fillLevelOptionsForLeague("handicap");
+      fillWeekOptions("handicap");
+      fillSingleTeamSideOptions("", "");
+      clearScoreFormPlayers();
+    }
+    updateHandicapFieldsVisibility();
+    updateScoreFormTeamsFromLeagueAndLevel();
   });
+
+  document.getElementById("level").addEventListener("change", () => {
+    const form = document.getElementById("score-form");
+    if (!form) return;
+    if (form.league.value === "box") {
+      autoPopulateBoxPlayersInForm();
+      return;
+    }
+    updateScoreFormTeamsFromLeagueAndLevel();
+  });
+
+  document.getElementById("week").addEventListener("change", autoPopulateBoxPlayersInForm);
+  document.getElementById("team1").addEventListener("change", autoPopulateBoxPlayersInForm);
+  document.getElementById("team2").addEventListener("change", autoPopulateBoxPlayersInForm);
 
   document.getElementById("score-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -946,7 +1121,7 @@
       form.team2_player2.value = "";
       form.games1.value = 0;
       form.games2.value = 0;
-      fillTeamDropdowns(level);
+      updateScoreFormTeamsFromLeagueAndLevel();
       switchTab("standings");
     } catch (err) {
       alert(err.message || "Failed to submit score");
@@ -999,6 +1174,18 @@
       }
     });
   }
+
+  // Initialize score-form selectors using current league/level selection.
+  const initialForm = document.getElementById("score-form");
+  if (initialForm && initialForm.league.value === "box") {
+    fillLevelOptionsForLeague("box");
+    fillWeekOptions("box");
+  } else {
+    fillLevelOptionsForLeague("handicap");
+    fillWeekOptions("handicap");
+  }
+  updateHandicapFieldsVisibility();
+  updateScoreFormTeamsFromLeagueAndLevel();
 
   // Initialize season dropdowns from backend SEASON_YEARS (after DOM ready so mobile menu uls exist)
   function runInitYearDropdowns() {
