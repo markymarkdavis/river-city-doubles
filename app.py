@@ -226,7 +226,7 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def send_match_notification_email(to_email: str, to_name: str, subject: str, body: str, html_body: str = None):
+def send_match_notification_email(to_email, to_name: str, subject: str, body: str, html_body: str = None):
     """
     Send an email notification.
     Service used: SMTP (intended for SendGrid SMTP in production).
@@ -243,8 +243,10 @@ def send_match_notification_email(to_email: str, to_name: str, subject: str, bod
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
-    msg["To"] = to_email
-    msg.set_content(f"Hi {to_name},\n\n{body}\n\n- River City Doubles")
+    recipients = to_email if isinstance(to_email, list) else [to_email]
+    msg["To"] = ", ".join(recipients)
+    greeting = "Hi everyone" if len(recipients) > 1 else f"Hi {to_name}"
+    msg.set_content(f"{greeting},\n\n{body}\n\n- River City Doubles")
     if html_body:
         msg.add_alternative(html_body, subtype="html")
 
@@ -318,6 +320,7 @@ def maybe_send_match_play_notifications(level, week, year):
         if not players:
             continue
         players_norm = {normalize_name(p) for p in players}
+        recipients = []
         for n_norm in players_norm:
             s = sub_by_name.get(n_norm)
             if not s:
@@ -325,24 +328,29 @@ def maybe_send_match_play_notifications(level, week, year):
             key = (s["email"], row["team1"] or "", row["team2"] or "")
             if key in sent_keys:
                 continue
-            subject = f"River City Doubles: You are scheduled to play (Week {week})"
-            body = (
-                f"You are listed in an upcoming {level.title()} handicap match.\n"
-                f"Week {week} ({WEEK_DATE_RANGES.get(week, '')}), season {year}-{year + 1}\n"
-                f"{row['team1']} vs {row['team2']}\n"
-            )
-            ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
-            if ok:
-                with get_db() as conn:
+            recipients.append(s)
+        if not recipients:
+            continue
+        subject = f"River City Doubles: You are scheduled to play (Week {week})"
+        body = (
+            f"You are listed in an upcoming {level.title()} handicap match.\n"
+            f"Week {week} ({WEEK_DATE_RANGES.get(week, '')}), season {year}-{year + 1}\n"
+            f"{row['team1']} vs {row['team2']}\n"
+        )
+        to_emails = [r["email"] for r in recipients]
+        ok, err = send_match_notification_email(to_emails, "players", subject, body)
+        if ok:
+            with get_db() as conn:
+                for r in recipients:
                     conn.execute(
                         """INSERT OR IGNORE INTO match_notifications_sent
                            (email, level, week, year, team1, team2, sent_at)
                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (s["email"], level, week, year, row["team1"] or "", row["team2"] or "", now_iso()),
+                        (r["email"], level, week, year, row["team1"] or "", row["team2"] or "", now_iso()),
                     )
-                    conn.commit()
-            else:
-                print(f"Match notification email failed for {s['email']}: {err}")
+                conn.commit()
+        else:
+            print(f"Match notification group email failed ({to_emails}): {err}")
 
 
 def maybe_send_round_standings_notifications(level, week, year):
@@ -430,9 +438,10 @@ def maybe_send_round_standings_notifications(level, week, year):
   </body>
 </html>
 """
-    for s in subs:
-        if s["email"] in sent_emails:
-            continue
+    pending = [s for s in subs if s["email"] not in sent_emails]
+    if not pending:
+        return
+    for s in pending:
         ok, err = send_match_notification_email(
             s["email"],
             s["name"],
