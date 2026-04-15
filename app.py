@@ -4,6 +4,9 @@ Stores scores in SQLite and serves standings for handicap open/main.
 """
 import os
 import sqlite3
+import smtplib
+from datetime import datetime, timezone
+from email.message import EmailMessage
 from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 
@@ -158,7 +161,296 @@ def init_db():
             conn.execute("ALTER TABLE schedule ADD COLUMN year INTEGER")
         except sqlite3.OperationalError:
             pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS email_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                notify_match INTEGER NOT NULL DEFAULT 1,
+                notify_round_standings INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        for col, default in (("notify_match", "1"), ("notify_round_standings", "0")):
+            try:
+                conn.execute(f"ALTER TABLE email_subscriptions ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}")
+            except sqlite3.OperationalError:
+                pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS match_notifications_sent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                level TEXT NOT NULL,
+                week INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                team1 TEXT NOT NULL,
+                team2 TEXT NOT NULL,
+                sent_at TEXT NOT NULL,
+                UNIQUE(email, level, week, year, team1, team2)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS round_standings_notifications_sent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                level TEXT NOT NULL,
+                week INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                sent_at TEXT NOT NULL,
+                UNIQUE(email, level, week, year)
+            )
+        """)
         conn.commit()
+
+
+def normalize_name(name: str) -> str:
+    return " ".join((name or "").strip().lower().split())
+
+
+def split_player_names(value: str):
+    """Best-effort parser for player strings like 'A and B', 'A/B', 'A, B'."""
+    if not value:
+        return []
+    cleaned = value.replace("/", ",").replace("&", ",").replace(" and ", ",")
+    out = []
+    for part in cleaned.split(","):
+        n = " ".join(part.strip().split())
+        if n:
+            out.append(n)
+    return out
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def send_match_notification_email(to_email: str, to_name: str, subject: str, body: str, html_body: str = None):
+    """
+    Send an email notification.
+    Service used: SMTP (intended for SendGrid SMTP in production).
+    """
+    smtp_host = os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net")
+    smtp_port = int(os.environ.get("RCD_SMTP_PORT", "587"))
+    smtp_user = os.environ.get("RCD_SMTP_USER", "apikey")
+    smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
+    from_email = os.environ.get("RCD_EMAIL_FROM", "rivercitydoublessquash@gmail.com").strip()
+    if not smtp_pass or not from_email:
+        # App remains functional even without outbound email configured.
+        return False, "Email config missing (RCD_SMTP_PASS and/or RCD_EMAIL_FROM)."
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg.set_content(f"Hi {to_name},\n\n{body}\n\n- River City Doubles")
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def compute_standings_rows(level, year):
+    allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
+    teams = {name: {"points": 0, "matches": 0, "wins": 0, "gamesWon": 0} for name in allowed}
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT team1, team2, games1, games2 FROM scores
+               WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
+            ("handicap", level, year),
+        ).fetchall()
+    for r in rows:
+        t1, t2 = r["team1"], r["team2"]
+        g1, g2 = int(r["games1"]), int(r["games2"])
+        winner = 1 if g1 > g2 else (2 if g2 > g1 else None)
+        for name, games, is_win in [(t1, g1, winner == 1), (t2, g2, winner == 2)]:
+            if name in teams:
+                teams[name]["points"] += points_for_team(games, is_win)
+                teams[name]["matches"] += 1
+                teams[name]["wins"] += 1 if is_win else 0
+                teams[name]["gamesWon"] += games
+    standings = []
+    for name, stats in sorted(teams.items(), key=lambda x: (-x[1]["points"], x[0].lower())):
+        losses = stats["matches"] - stats["wins"]
+        standings.append({"name": name, **stats, "record": f"{stats['wins']}-{losses}"})
+    return standings
+
+
+def maybe_send_match_play_notifications(level, week, year):
+    """
+    Notify subscribed players when they are scheduled to play in this week and that
+    specific match row still has no score (upcoming/in-progress reminder).
+    """
+    init_db()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT team1, team2, team1_players, team2_players
+               FROM schedule
+               WHERE level = ? AND week = ? AND (year = ? OR year IS NULL)
+                 AND (score IS NULL OR TRIM(score) = '')""",
+            (level, week, year),
+        ).fetchall()
+        subs = conn.execute(
+            """SELECT name, email FROM email_subscriptions
+               WHERE is_active = 1 AND notify_match = 1""",
+        ).fetchall()
+        sent_rows = conn.execute(
+            """SELECT email, team1, team2 FROM match_notifications_sent
+               WHERE level = ? AND week = ? AND year = ?""",
+            (level, week, year),
+        ).fetchall()
+        sent_keys = {(r["email"], r["team1"], r["team2"]) for r in sent_rows}
+
+    if not rows or not subs:
+        return
+
+    sub_by_name = {normalize_name(s["name"]): s for s in subs}
+    for row in rows:
+        players = split_player_names(row["team1_players"]) + split_player_names(row["team2_players"])
+        if not players:
+            continue
+        players_norm = {normalize_name(p) for p in players}
+        for n_norm in players_norm:
+            s = sub_by_name.get(n_norm)
+            if not s:
+                continue
+            key = (s["email"], row["team1"] or "", row["team2"] or "")
+            if key in sent_keys:
+                continue
+            subject = f"River City Doubles: You are scheduled to play (Week {week})"
+            body = (
+                f"You are listed in an upcoming {level.title()} handicap match.\n"
+                f"Week {week} ({WEEK_DATE_RANGES.get(week, '')}), season {year}-{year + 1}\n"
+                f"{row['team1']} vs {row['team2']}\n"
+            )
+            ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
+            if ok:
+                with get_db() as conn:
+                    conn.execute(
+                        """INSERT OR IGNORE INTO match_notifications_sent
+                           (email, level, week, year, team1, team2, sent_at)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (s["email"], level, week, year, row["team1"] or "", row["team2"] or "", now_iso()),
+                    )
+                    conn.commit()
+            else:
+                print(f"Match notification email failed for {s['email']}: {err}")
+
+
+def maybe_send_round_standings_notifications(level, week, year):
+    """
+    Send standings digest when all non-bye matches in a week have scores.
+    """
+    init_db()
+    with get_db() as conn:
+        totals = conn.execute(
+            """SELECT
+                 SUM(CASE WHEN team1 IS NOT NULL AND team2 IS NOT NULL
+                           AND (bye IS NULL OR TRIM(bye) = '') THEN 1 ELSE 0 END) AS expected,
+                 SUM(CASE WHEN team1 IS NOT NULL AND team2 IS NOT NULL
+                           AND (bye IS NULL OR TRIM(bye) = '')
+                           AND score IS NOT NULL AND TRIM(score) <> '' THEN 1 ELSE 0 END) AS completed
+               FROM schedule
+               WHERE level = ? AND week = ? AND (year = ? OR year IS NULL)""",
+            (level, week, year),
+        ).fetchone()
+        expected = int(totals["expected"] or 0)
+        completed = int(totals["completed"] or 0)
+        if expected == 0 or completed < expected:
+            return
+
+        subs = conn.execute(
+            """SELECT name, email FROM email_subscriptions
+               WHERE is_active = 1 AND notify_round_standings = 1""",
+        ).fetchall()
+        sent = conn.execute(
+            """SELECT email FROM round_standings_notifications_sent
+               WHERE level = ? AND week = ? AND year = ?""",
+            (level, week, year),
+        ).fetchall()
+        sent_emails = {r["email"] for r in sent}
+
+    if not subs:
+        return
+    standings = compute_standings_rows(level, year)
+    lines = []
+    for i, row in enumerate(standings, start=1):
+        lines.append(
+            f"{i}. {row['name']} - {row['points']} pts, {row['record']} record, {row['gamesWon']} games won"
+        )
+    standings_text = "\n".join(lines) if lines else "No standings yet."
+    subject = f"River City Doubles: {level.title()} standings after Week {week}"
+    base_body = (
+        f"Week {week} is complete for {level.title()} handicap ({year}-{year + 1}).\n\n"
+        f"Current standings:\n{standings_text}\n"
+    )
+    html_rows = "".join(
+        (
+            "<tr>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{i}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db'>{row['name']}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{row['points']}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{row['matches']}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{row['record']}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{row['gamesWon']}</td>"
+            "</tr>"
+        )
+        for i, row in enumerate(standings, start=1)
+    )
+    html_body = f"""
+<html>
+  <body style="font-family:Arial,sans-serif;color:#111827">
+    <p>Hi {{{{name}}}},</p>
+    <p>Week {week} is complete for {level.title()} handicap ({year}-{year + 1}).</p>
+    <p>Current standings:</p>
+    <table style='border-collapse:collapse;min-width:680px'>
+      <thead>
+        <tr style='background:#f3f4f6'>
+          <th style='padding:8px;border:1px solid #d1d5db'>#</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Team</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Points</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Matches</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Record</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Games won</th>
+        </tr>
+      </thead>
+      <tbody>
+        {html_rows}
+      </tbody>
+    </table>
+    <p style='margin-top:16px'>- River City Doubles</p>
+  </body>
+</html>
+"""
+    for s in subs:
+        if s["email"] in sent_emails:
+            continue
+        ok, err = send_match_notification_email(
+            s["email"],
+            s["name"],
+            subject,
+            base_body,
+            html_body=html_body.replace("{name}", s["name"]),
+        )
+        if ok:
+            with get_db() as conn:
+                conn.execute(
+                    """INSERT OR IGNORE INTO round_standings_notifications_sent
+                       (email, level, week, year, sent_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (s["email"], level, week, year, now_iso()),
+                )
+                conn.commit()
+        else:
+            print(f"Standings email failed for {s['email']}: {err}")
 
 
 def ensure_db_ready():
@@ -261,6 +553,85 @@ def get_weeks():
 def get_years():
     """Season years for the year dropdown."""
     return jsonify(SEASON_YEARS)
+
+
+@app.route("/api/notifications/subscriptions", methods=["POST"])
+def upsert_subscription():
+    data = request.get_json() or {}
+    name = " ".join((data.get("name") or "").strip().split())
+    email = (data.get("email") or "").strip().lower()
+    is_active = bool(data.get("is_active", True))
+    notify_match = bool(data.get("notify_match", True))
+    notify_round_standings = bool(data.get("notify_round_standings", False))
+    if not name:
+        return jsonify({"error": "Name is required"}), 400
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email is required"}), 400
+
+    init_db()
+    ts = now_iso()
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT id FROM email_subscriptions WHERE email = ?",
+            (email,),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """UPDATE email_subscriptions
+                   SET name = ?, is_active = ?, notify_match = ?, notify_round_standings = ?, updated_at = ?
+                   WHERE id = ?""",
+                (
+                    name,
+                    1 if is_active else 0,
+                    1 if notify_match else 0,
+                    1 if notify_round_standings else 0,
+                    ts,
+                    existing["id"],
+                ),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO email_subscriptions
+                   (name, email, is_active, notify_match, notify_round_standings, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    name,
+                    email,
+                    1 if is_active else 0,
+                    1 if notify_match else 0,
+                    1 if notify_round_standings else 0,
+                    ts,
+                    ts,
+                ),
+            )
+        conn.commit()
+    return jsonify(
+        {
+            "ok": True,
+            "email": email,
+            "is_active": is_active,
+            "notify_match": notify_match,
+            "notify_round_standings": notify_round_standings,
+        }
+    ), 200
+
+
+@app.route("/api/notifications/subscriptions", methods=["DELETE"])
+def delete_subscription():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or request.args.get("email") or "").strip().lower()
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    init_db()
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE email_subscriptions
+               SET is_active = 0, notify_match = 0, notify_round_standings = 0, updated_at = ?
+               WHERE email = ?""",
+            (now_iso(), email),
+        )
+        conn.commit()
+    return jsonify({"ok": True, "email": email, "is_active": False}), 200
 
 
 def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):
@@ -373,6 +744,11 @@ def post_score():
                     (level, week, date_range, team1, team2, team1_players, team2_players, handicap, score_str, winner, year),
                 )
             conn.commit()
+    try:
+        maybe_send_match_play_notifications(level, week, year)
+        maybe_send_round_standings_notifications(level, week, year)
+    except Exception as e:
+        print(f"Notification hook failed: {e}")
     return jsonify({"ok": True}), 201
 
 
@@ -487,6 +863,11 @@ def post_schedule():
             ),
         )
         conn.commit()
+    try:
+        year = int((data.get("year") or SEASON_YEARS[-1]))
+        maybe_send_match_play_notifications(level, week, year)
+    except Exception as e:
+        print(f"Schedule notification hook failed: {e}")
     return jsonify({"ok": True}), 201
 
 

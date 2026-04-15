@@ -50,6 +50,7 @@
           <li><button type="button" class="mobile-menu-item" data-tab="standings" data-value="2025">2025-2026</button></li>
         </ul>
       </li>
+      <li><button type="button" class="mobile-menu-item" data-tab="notifications">Email Notifications</button></li>
       <li>
         <span class="mobile-menu-label">Rules</span>
         <ul class="mobile-menu-sublist">
@@ -83,6 +84,7 @@
         <button type="button" class="tab-dropdown-option" data-tab="standings" data-value="2025-2026">2025-2026</button>
       </div>
     </div>
+    <button type="button" class="tab" role="tab" aria-selected="false" data-tab="notifications">Email Notifications</button>
     <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="rules" id="tab-rules-wrap">
       <button type="button" class="tab tab-dropdown-trigger" id="nav-rules-trigger" aria-label="Rules" aria-haspopup="listbox" aria-expanded="false">Rules ▾</button>
       <div class="tab-dropdown-panel" id="nav-rules-panel" role="listbox" hidden>
@@ -187,6 +189,7 @@
                       <th>Dates</th>
                       <th>Team 1</th>
                       <th>Team 2</th>
+                      <th>Players</th>
                       <th class="box-player-header" data-letter="A">A</th>
                       <th class="box-player-header" data-letter="B">B</th>
                       <th class="box-player-header" data-letter="C">C</th>
@@ -283,6 +286,38 @@
             <input type="number" id="games2" name="games2" min="0" max="3" value="0" required />
           </div>
           <button type="submit" class="btn btn-primary">Submit Score</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="panel-notifications" class="panel" role="tabpanel" aria-labelledby="tab-notifications" hidden>
+      <div class="content-card form-card">
+        <h2>Email Notifications</h2>
+        <p class="standings-intro">Add your name and email if you want a notification when your match score is submitted.</p>
+        <form id="notifications-form" class="score-form">
+          <div class="form-row">
+            <label for="notify-name">Name</label>
+            <input type="text" id="notify-name" name="notify_name" placeholder="Your full name" required />
+          </div>
+          <div class="form-row">
+            <label for="notify-email">Email</label>
+            <input type="email" id="notify-email" name="notify_email" placeholder="you@example.com" required />
+          </div>
+          <div class="form-row">
+            <label for="notify-active">Email me when I play</label>
+            <input type="checkbox" id="notify-active" name="notify_active" checked />
+          </div>
+          <div class="form-row">
+            <label for="notify-standings">Email me standings after each completed round</label>
+            <input type="checkbox" id="notify-standings" name="notify_standings" />
+          </div>
+          <div class="form-row">
+            <button type="submit" class="btn btn-primary notifications-action-btn">Save Notification Settings</button>
+          </div>
+          <div class="form-row">
+            <button type="button" class="btn notifications-action-btn" id="notify-remove">Remove My Email</button>
+          </div>
+          <p id="notifications-status" class="form-hint" aria-live="polite"></p>
         </form>
       </div>
     </section>

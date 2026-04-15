@@ -547,6 +547,11 @@ body {
   background: var(--accent-hover);
 }
 
+.notifications-action-btn {
+  width: 260px;
+  max-width: 100%;
+}
+
 .standings-intro {
   margin-bottom: 20px !important;
 }
@@ -677,6 +682,14 @@ body {
   color: var(--accent);
   background: var(--surface-hover);
   border-color: var(--accent);
+}
+
+.box-schedule-players {
+  min-width: 12rem;
+  max-width: 22rem;
+  white-space: normal;
+  font-size: 0.875rem;
+  color: var(--text-muted);
 }
 
 .box-totals-row td {
