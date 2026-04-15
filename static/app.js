@@ -149,6 +149,16 @@
     return { team1: [m[1], m[2]], team2: [m[3], m[4]] };
   }
 
+  // Expand matchup letters to player names for the active box.
+  function formatMatchupPlayerNames(team, matchup) {
+    const { team1: t1, team2: t2 } = parseMatchup(matchup);
+    const p = BOX_PLAYERS[team];
+    if (!p || t1.length !== 2 || t2.length !== 2) return matchup;
+    const side = (letters) =>
+      letters.map((L) => escapeHtml(p[L] || L)).join(" & ");
+    return `${side(t1)} vs ${side(t2)}`;
+  }
+
   // Derive per-player scores from matchup and team totals. Sitting players get "X".
   function getPlayerScoresForMatchup(matchup, team1, team2) {
     const { team1: t1, team2: t2 } = parseMatchup(matchup);
@@ -348,6 +358,38 @@
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || "Failed to submit score");
     }
+  }
+
+  async function saveNotificationSubscription(entry) {
+    const res = await fetchWithTimeout(apiUrl("/api/notifications/subscriptions"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: entry.name,
+        email: entry.email,
+        is_active: entry.isActive,
+        notify_match: entry.notifyMatch,
+        notify_round_standings: entry.notifyRoundStandings,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to save notification settings");
+    }
+    return res.json();
+  }
+
+  async function removeNotificationSubscription(email) {
+    const res = await fetchWithTimeout(apiUrl("/api/notifications/subscriptions"), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || "Failed to remove email");
+    }
+    return res.json();
   }
 
   async function fetchStandings(league, level) {
@@ -601,6 +643,7 @@
         <td>${escapeHtml(row.dates)}</td>
         <td>${row.team1}</td>
         <td>${row.team2}</td>
+        <td class="box-schedule-players">${formatMatchupPlayerNames(team, row.matchup)}</td>
         <td>${a}</td>
         <td>${b}</td>
         <td>${c}</td>
@@ -627,6 +670,7 @@
       <td></td>
       <td><strong>${total1}</strong></td>
       <td><strong>${total2}</strong></td>
+      <td></td>
       <td><strong>${playerTotals.A}</strong></td>
       <td><strong>${playerTotals.B}</strong></td>
       <td><strong>${playerTotals.C}</strong></td>
@@ -908,6 +952,53 @@
       alert(err.message || "Failed to submit score");
     }
   });
+
+  const notificationsForm = document.getElementById("notifications-form");
+  const notificationsStatus = document.getElementById("notifications-status");
+  const notificationsRemoveBtn = document.getElementById("notify-remove");
+  if (notificationsForm && notificationsStatus && notificationsRemoveBtn) {
+    notificationsForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = notificationsForm.notify_name.value.trim();
+      const email = notificationsForm.notify_email.value.trim();
+      const isActive = !!notificationsForm.notify_active.checked;
+      const notifyRoundStandings = !!notificationsForm.notify_standings.checked;
+      if (!name || !email) {
+        notificationsStatus.textContent = "Please enter both name and email.";
+        return;
+      }
+      try {
+        await saveNotificationSubscription({
+          name,
+          email,
+          isActive,
+          notifyMatch: isActive,
+          notifyRoundStandings,
+        });
+        notificationsStatus.textContent = isActive
+          ? "Saved. You'll get match notifications and selected standings emails."
+          : "Saved. Email notifications are currently turned off.";
+      } catch (err) {
+        notificationsStatus.textContent = err.message || "Unable to save notification settings.";
+      }
+    });
+
+    notificationsRemoveBtn.addEventListener("click", async () => {
+      const email = notificationsForm.notify_email.value.trim();
+      if (!email) {
+        notificationsStatus.textContent = "Enter your email first, then click Remove.";
+        return;
+      }
+      try {
+        await removeNotificationSubscription(email);
+        notificationsForm.notify_active.checked = false;
+        notificationsForm.notify_standings.checked = false;
+        notificationsStatus.textContent = "Your email has been removed from notifications.";
+      } catch (err) {
+        notificationsStatus.textContent = err.message || "Unable to remove email.";
+      }
+    });
+  }
 
   // Initialize season dropdowns from backend SEASON_YEARS (after DOM ready so mobile menu uls exist)
   function runInitYearDropdowns() {
