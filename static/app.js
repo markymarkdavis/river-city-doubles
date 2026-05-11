@@ -22,6 +22,49 @@
     return path; // same-origin (local Flask or Render)
   }
 
+  const RCD_BUILD_TOKEN_KEY = "rcd_build_token";
+
+  async function bustCachesAndServiceWorkers() {
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((n) => caches.delete(n)));
+    }
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  }
+
+  /** When asset_version or reload_bump changes vs localStorage, clear SW + caches and reload once. */
+  void (async function ensureFreshClientAfterDeploy() {
+    try {
+      let url;
+      try {
+        url = apiUrl("/api/build-info");
+      } catch {
+        return;
+      }
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const asset = String(data.asset_version || "");
+      const bump = String(data.reload_bump || "");
+      const token = bump ? `${asset}|${bump}` : asset;
+      if (!token) return;
+      const prev = localStorage.getItem(RCD_BUILD_TOKEN_KEY);
+      if (prev === token) return;
+      if (prev != null && prev !== token) {
+        await bustCachesAndServiceWorkers();
+      }
+      localStorage.setItem(RCD_BUILD_TOKEN_KEY, token);
+      if (prev != null && prev !== token) {
+        window.location.reload();
+      }
+    } catch {
+      /* offline or API blocked */
+    }
+  })();
+
   const FETCH_TIMEOUT_MS = 90000; // free-tier cold start can take 1–2 min
   function fetchWithTimeout(url, options) {
     const ctrl = new AbortController();

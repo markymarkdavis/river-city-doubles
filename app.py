@@ -14,6 +14,8 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
 ASSET_VERSION = os.environ.get("RCD_ASSET_VERSION", datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
+# Optional: change this on Render (e.g. bump "2") to force every browser to reload once and drop SW + caches.
+CLIENT_RELOAD_BUMP = os.environ.get("RCD_CLIENT_RELOAD_BUMP", "").strip()
 
 cors_origins = os.environ.get("RCD_CORS_ORIGINS", "*").strip()
 CORS(
@@ -529,6 +531,12 @@ def points_for_team(games_won: int, is_winner: bool) -> int:
 def health():
     """Lightweight endpoint for Render health checks and keep-alive pings (e.g. UptimeRobot every 5–10 min to avoid free-tier spin-down)."""
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/api/build-info")
+def build_info():
+    """Client uses this to detect a new deploy and optionally force a one-time hard refresh (SW + caches)."""
+    return jsonify({"asset_version": ASSET_VERSION, "reload_bump": CLIENT_RELOAD_BUMP}), 200
 
 
 @app.route("/")
