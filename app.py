@@ -104,8 +104,10 @@ WEEK_DATE_RANGES = {
     7: "Mar 1–Mar 7",
 }
 
-# Single active season; exposed via /api/years
-SEASON_YEARS = [2025]
+# Seasons shown in the year dropdown; exposed via /api/years
+SEASON_YEARS = [2025, 2026]
+# When a request omits year, keep 2025–2026 as the default handicap season
+DEFAULT_SEASON_YEAR = 2025
 
 
 def get_db():
@@ -179,6 +181,19 @@ def init_db():
                 conn.execute(f"ALTER TABLE email_subscriptions ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}")
             except sqlite3.OperationalError:
                 pass
+        for col, default in (("notify_handicap", "0"), ("notify_box", "0")):
+            try:
+                conn.execute(f"ALTER TABLE email_subscriptions ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}")
+            except sqlite3.OperationalError:
+                pass
+        # One-time backfill: legacy match/standings flags → handicap league bucket.
+        try:
+            conn.execute(
+                """UPDATE email_subscriptions SET notify_handicap = 1
+                   WHERE (notify_match = 1 OR notify_round_standings = 1) AND notify_handicap = 0"""
+            )
+        except sqlite3.OperationalError:
+            pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS match_notifications_sent (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -303,7 +318,7 @@ def maybe_send_match_play_notifications(level, week, year):
         ).fetchall()
         subs = conn.execute(
             """SELECT name, email FROM email_subscriptions
-               WHERE is_active = 1 AND notify_match = 1""",
+               WHERE is_active = 1 AND notify_handicap = 1""",
         ).fetchall()
         sent_rows = conn.execute(
             """SELECT email, team1, team2 FROM match_notifications_sent
@@ -378,7 +393,7 @@ def maybe_send_round_standings_notifications(level, week, year):
 
         subs = conn.execute(
             """SELECT name, email FROM email_subscriptions
-               WHERE is_active = 1 AND notify_round_standings = 1""",
+               WHERE is_active = 1 AND notify_handicap = 1""",
         ).fetchall()
         sent = conn.execute(
             """SELECT email FROM round_standings_notifications_sent
@@ -587,9 +602,19 @@ def upsert_subscription():
     data = request.get_json() or {}
     name = " ".join((data.get("name") or "").strip().split())
     email = (data.get("email") or "").strip().lower()
-    is_active = bool(data.get("is_active", True))
-    notify_match = bool(data.get("notify_match", True))
-    notify_round_standings = bool(data.get("notify_round_standings", False))
+    # Prefer new league flags; fall back to legacy keys for older clients.
+    if "notify_handicap" in data or "notify_box" in data:
+        notify_handicap = bool(data.get("notify_handicap", False))
+        notify_box = bool(data.get("notify_box", False))
+    else:
+        notify_handicap = bool(data.get("notify_match", True)) or bool(
+            data.get("notify_round_standings", False)
+        )
+        notify_box = bool(data.get("notify_box", False))
+    is_active = notify_handicap or notify_box
+    # Keep legacy columns aligned with handicap bucket (match + standings use same gate).
+    notify_match = 1 if notify_handicap else 0
+    notify_round_standings = 1 if notify_handicap else 0
     if not name:
         return jsonify({"error": "Name is required"}), 400
     if not email or "@" not in email:
@@ -605,13 +630,16 @@ def upsert_subscription():
         if existing:
             conn.execute(
                 """UPDATE email_subscriptions
-                   SET name = ?, is_active = ?, notify_match = ?, notify_round_standings = ?, updated_at = ?
+                   SET name = ?, is_active = ?, notify_match = ?, notify_round_standings = ?,
+                       notify_handicap = ?, notify_box = ?, updated_at = ?
                    WHERE id = ?""",
                 (
                     name,
                     1 if is_active else 0,
-                    1 if notify_match else 0,
-                    1 if notify_round_standings else 0,
+                    notify_match,
+                    notify_round_standings,
+                    1 if notify_handicap else 0,
+                    1 if notify_box else 0,
                     ts,
                     existing["id"],
                 ),
@@ -619,14 +647,17 @@ def upsert_subscription():
         else:
             conn.execute(
                 """INSERT INTO email_subscriptions
-                   (name, email, is_active, notify_match, notify_round_standings, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   (name, email, is_active, notify_match, notify_round_standings,
+                    notify_handicap, notify_box, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     name,
                     email,
                     1 if is_active else 0,
-                    1 if notify_match else 0,
-                    1 if notify_round_standings else 0,
+                    notify_match,
+                    notify_round_standings,
+                    1 if notify_handicap else 0,
+                    1 if notify_box else 0,
                     ts,
                     ts,
                 ),
@@ -637,8 +668,8 @@ def upsert_subscription():
             "ok": True,
             "email": email,
             "is_active": is_active,
-            "notify_match": notify_match,
-            "notify_round_standings": notify_round_standings,
+            "notify_handicap": notify_handicap,
+            "notify_box": notify_box,
         }
     ), 200
 
@@ -653,7 +684,8 @@ def delete_subscription():
     with get_db() as conn:
         conn.execute(
             """UPDATE email_subscriptions
-               SET is_active = 0, notify_match = 0, notify_round_standings = 0, updated_at = ?
+               SET is_active = 0, notify_match = 0, notify_round_standings = 0,
+                   notify_handicap = 0, notify_box = 0, updated_at = ?
                WHERE email = ?""",
             (now_iso(), email),
         )
@@ -704,7 +736,7 @@ def post_score():
     if year is not None:
         year = int(year) if isinstance(year, int) else int(year) if str(year).strip() else None
     if year is None:
-        year = SEASON_YEARS[-1]  # default to most recent
+        year = DEFAULT_SEASON_YEAR
 
     if league not in ("box", "handicap") or level not in ("open", "main"):
         return jsonify({"error": "Invalid league or level"}), 400
@@ -785,7 +817,7 @@ def get_standings(league, level):
         return jsonify({"error": "Only handicap open/main standings supported"}), 400
     year = request.args.get("year", type=int)
     if year is None:
-        year = SEASON_YEARS[-1]
+        year = DEFAULT_SEASON_YEAR
 
     allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
     teams = {name: {"points": 0, "matches": 0, "wins": 0, "gamesWon": 0} for name in allowed}
@@ -827,7 +859,7 @@ def get_schedule():
         return jsonify({"error": "level must be open or main"}), 400
     year = request.args.get("year", type=int)
     if year is None:
-        year = SEASON_YEARS[-1]
+        year = DEFAULT_SEASON_YEAR
     try:
         ensure_db_ready()
         with get_db() as conn:
@@ -891,7 +923,7 @@ def post_schedule():
         )
         conn.commit()
     try:
-        year = int((data.get("year") or SEASON_YEARS[-1]))
+        year = int((data.get("year") or DEFAULT_SEASON_YEAR))
         maybe_send_match_play_notifications(level, week, year)
     except Exception as e:
         print(f"Schedule notification hook failed: {e}")

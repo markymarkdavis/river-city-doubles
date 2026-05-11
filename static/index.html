@@ -294,7 +294,7 @@
     <section id="panel-notifications" class="panel" role="tabpanel" aria-labelledby="tab-notifications" hidden>
       <div class="content-card form-card">
         <h2>Email Notifications</h2>
-        <p class="standings-intro">Add your name and email if you want a notification when your match score is submitted.</p>
+        <p class="standings-intro">Add your name and email to receive updates. Choose which leagues you want to hear about.</p>
         <form id="notifications-form" class="score-form">
           <div class="form-row">
             <label for="notify-name">Name</label>
@@ -305,12 +305,14 @@
             <input type="email" id="notify-email" name="notify_email" placeholder="you@example.com" required />
           </div>
           <div class="form-row">
-            <label for="notify-active">Email me when I play</label>
-            <input type="checkbox" id="notify-active" name="notify_active" checked />
+            <label for="notify-handicap">Handicap league</label>
+            <input type="checkbox" id="notify-handicap" name="notify_handicap" checked />
+            <span class="form-hint" style="display:block;margin-top:4px">Match reminders when you are on the schedule, and standings email after each completed round (Open / Main).</span>
           </div>
           <div class="form-row">
-            <label for="notify-standings">Email me standings after each completed round</label>
-            <input type="checkbox" id="notify-standings" name="notify_standings" />
+            <label for="notify-box">Box league</label>
+            <input type="checkbox" id="notify-box" name="notify_box" />
+            <span class="form-hint" style="display:block;margin-top:4px">Reserved for future box-league emails.</span>
           </div>
           <div class="form-row">
             <button type="submit" class="btn btn-primary notifications-action-btn">Save Notification Settings</button>

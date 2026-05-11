@@ -160,9 +160,9 @@
   }
 
   // Expand matchup letters to player names for the active box, by side.
-  function getMatchupPlayerNamesBySide(team, matchup) {
+  function getMatchupPlayerNamesBySide(team, matchup, year) {
     const { team1: t1, team2: t2 } = parseMatchup(matchup);
-    const p = BOX_PLAYERS[team];
+    const p = getBoxPlayersForYear(team, year);
     if (!p || t1.length !== 2 || t2.length !== 2) {
       return { team1: "", team2: "" };
     }
@@ -273,9 +273,52 @@
     ],
   };
 
+  // 2026–2027 season (year select value 2026): overrides per box when present.
+  const BOX_PLAYERS_2026 = {
+    "Foo Fighters": {
+      A: "Mark Davis",
+      B: "Jim Davis",
+      C: "Sanjay Hinduja",
+      D: "Grant Stevens",
+      E: "Andy Mack",
+      F: "Eddie O'Leary",
+    },
+  };
+
+  const BOX_SCHEDULES_2026 = {
+    "Foo Fighters": [
+      { matchup: "A & D vs B & C", dates: "May 12, 2026", team1: "", team2: "" },
+      { matchup: "A & F vs D & E", dates: "May 13, 2026", team1: "", team2: "" },
+      { matchup: "B & E vs C & F", dates: "May 14, 2026", team1: "", team2: "" },
+      { matchup: "A & B vs D & F", dates: "May 15, 2026", team1: "", team2: "" },
+      { matchup: "B & E vs C & D", dates: "May 16, 2026", team1: "", team2: "" },
+      { matchup: "A & C vs D & F", dates: "May 17, 2026", team1: "", team2: "" },
+      { matchup: "A & E vs B & F", dates: "May 18, 2026", team1: "", team2: "" },
+      { matchup: "A & B vs C & E", dates: "May 19, 2026", team1: "", team2: "" },
+      { matchup: "B & D vs C & F", dates: "May 20, 2026", team1: "", team2: "" },
+    ],
+  };
+
+  function seasonBoxYear(year) {
+    const y = Number(year);
+    return Number.isNaN(y) ? 2025 : y;
+  }
+
+  function getBoxPlayersForYear(team, year) {
+    const y = seasonBoxYear(year);
+    if (y === 2026 && BOX_PLAYERS_2026[team]) return BOX_PLAYERS_2026[team];
+    return BOX_PLAYERS[team] || {};
+  }
+
+  function getBoxScheduleRowsForYear(team, year) {
+    const y = seasonBoxYear(year);
+    if (y === 2026 && BOX_SCHEDULES_2026[team]) return BOX_SCHEDULES_2026[team];
+    return BOX_SCHEDULES[team] || [];
+  }
+
   // Get player totals for a box, sorted by total descending.
-  function getBoxPlayerTotals(team) {
-    const rows = getFullBoxRows(team);
+  function getBoxPlayerTotals(team, year) {
+    const rows = getFullBoxRows(team, year);
     const playerTotals = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
     rows.forEach((row) => {
       ["a", "b", "c", "d", "e", "f"].forEach((key) => {
@@ -286,7 +329,7 @@
         }
       });
     });
-    const players = BOX_PLAYERS && BOX_PLAYERS[team];
+    const players = getBoxPlayersForYear(team, year);
     return ["A", "B", "C", "D", "E", "F"]
       .map((letter) => ({
         letter,
@@ -297,8 +340,9 @@
   }
 
   // Build full 15 rows for a box, merging canonical matchups with recorded scores.
-  function getFullBoxRows(team) {
-    const recorded = (BOX_SCHEDULES[team] || []).reduce((acc, r) => {
+  function getFullBoxRows(team, year) {
+    const scheduleRows = getBoxScheduleRowsForYear(team, year);
+    const recorded = scheduleRows.reduce((acc, r) => {
       acc[r.matchup] = r;
       return acc;
     }, {});
@@ -309,7 +353,7 @@
       const scores = getPlayerScoresForMatchup(m.matchup, team1, team2);
       return {
         matchup: m.matchup,
-        dates: m.dates,
+        dates: r && r.dates ? r.dates : m.dates,
         team1,
         team2,
         a: scores.A,
@@ -393,8 +437,17 @@
     };
     addOpt("", "Select week");
     if (league === "box") {
+      const form = document.getElementById("score-form");
+      const box = form && form.level ? form.level.value : "";
+      const year = getYearFrom("year-input");
+      const rec = getBoxScheduleRowsForYear(box, year).reduce((acc, row) => {
+        acc[row.matchup] = row;
+        return acc;
+      }, {});
       FULL_BOX_MATCHUPS.forEach((m, idx) => {
-        addOpt(String(idx + 1), `${idx + 1} — ${m.dates}`);
+        const row = rec[m.matchup];
+        const dateLabel = row && row.dates ? row.dates : m.dates;
+        addOpt(String(idx + 1), `${idx + 1} — ${dateLabel}`);
       });
     } else {
       HANDICAP_WEEK_OPTIONS.forEach((w) => addOpt(w.value, w.label));
@@ -447,8 +500,9 @@
       return;
     }
     const parsed = parseMatchup(matchup.matchup);
-    const p1 = BOX_PLAYERS[box] || {};
-    const p2 = BOX_PLAYERS[box] || {};
+    const year = getYearFrom("year-input");
+    const p1 = getBoxPlayersForYear(box, year);
+    const p2 = getBoxPlayersForYear(box, year);
     fillSingleTeamSideOptions(`${parsed.team1[0]} & ${parsed.team1[1]}`, `${parsed.team2[0]} & ${parsed.team2[1]}`);
     form.team1_player1.value = parsed.team1[0] ? (p1[parsed.team1[0]] || "") : "";
     form.team1_player2.value = parsed.team1[1] ? (p1[parsed.team1[1]] || "") : "";
@@ -512,9 +566,8 @@
       body: JSON.stringify({
         name: entry.name,
         email: entry.email,
-        is_active: entry.isActive,
-        notify_match: entry.notifyMatch,
-        notify_round_standings: entry.notifyRoundStandings,
+        notify_handicap: entry.notifyHandicap,
+        notify_box: entry.notifyBox,
       }),
     });
     if (!res.ok) {
@@ -564,19 +617,36 @@
   }
 
   const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings"];
-  const TAB_TO_YEAR_SELECT = { schedule: "year-schedule", input: "year-input", standings: "year-standings" };
+  let rcdYearSelectListenersAttached = false;
+
+  function refreshUiForSeasonYear() {
+    void renderScheduleTable("open");
+    void renderScheduleTable("main");
+    renderBoxSchedule();
+    void renderStandingsTable("handicap-open");
+    void renderStandingsTable("handicap-main");
+    renderBoxStandings();
+    const form = document.getElementById("score-form");
+    if (form && form.league.value === "box") {
+      fillWeekOptions("box");
+      autoPopulateBoxPlayersInForm();
+    }
+  }
 
   function setYearForTab(tabId, value) {
-    const selectId = TAB_TO_YEAR_SELECT[tabId];
-    if (!selectId || value === undefined) return;
+    if (value === undefined) return;
     const year = typeof value === "string" ? parseInt(value.split("-")[0], 10) : value;
-    const select = document.getElementById(selectId);
-    if (select && !Number.isNaN(year)) select.value = String(year);
+    if (Number.isNaN(year)) return;
+    YEAR_SELECT_IDS.forEach((sid) => {
+      const s = document.getElementById(sid);
+      if (s) s.value = String(year);
+    });
+    refreshUiForSeasonYear();
   }
 
   function fillYearOptions(years) {
     if (!Array.isArray(years) || years.length === 0) return;
-    const latest = Math.max.apply(null, years);
+    const defaultYear = years.includes(2025) ? 2025 : Math.max.apply(null, years);
     const label = (y) => `${y}-${y + 1}`;
 
     YEAR_SELECT_IDS.forEach((id) => {
@@ -595,7 +665,7 @@
         option.textContent = label(y);
         select.appendChild(option);
       });
-      select.value = String(latest);
+      select.value = String(defaultYear);
     });
 
     const panelIds = ["nav-schedule-panel", "nav-input-panel", "nav-standings-panel"];
@@ -636,8 +706,11 @@
     });
   }
 
+  // Shown immediately and if /api/years fails (offline, wrong api base, timeout).
+  const FALLBACK_SEASON_YEARS = [2025, 2026];
+
   async function initYearDropdowns() {
-    fillYearOptions([2025]); // default to 2025-2026 season until API responds
+    fillYearOptions(FALLBACK_SEASON_YEARS);
     try {
       const years = await fetchYears();
       if (Array.isArray(years) && years.length > 0) {
@@ -645,6 +718,23 @@
       }
     } catch (err) {
       console.error("Failed to load years:", err);
+      fillYearOptions(FALLBACK_SEASON_YEARS);
+    }
+    if (!rcdYearSelectListenersAttached) {
+      rcdYearSelectListenersAttached = true;
+      function onSeasonYearChange(ev) {
+        const v = ev.target.value;
+        YEAR_SELECT_IDS.forEach((sid) => {
+          const s = document.getElementById(sid);
+          if (s) s.value = v;
+        });
+        refreshUiForSeasonYear();
+      }
+      YEAR_SELECT_IDS.forEach((id) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        sel.addEventListener("change", onSeasonYearChange);
+      });
     }
   }
 
@@ -758,12 +848,13 @@
     if (!tbody) return;
     const activeTab = document.querySelector(".box-tab.active");
     const team = activeTab ? activeTab.dataset.boxTeam : "Foo Fighters";
-    const rows = getFullBoxRows(team);
+    const year = getYearFrom("year-schedule");
+    const rows = getFullBoxRows(team, year);
     tbody.innerHTML = "";
 
     // Update player headers (A..F = name) to match this box.
     const headerCells = document.querySelectorAll(".box-player-header");
-    const players = BOX_PLAYERS && BOX_PLAYERS[team];
+    const players = getBoxPlayersForYear(team, year);
     if (players) {
       headerCells.forEach((th) => {
         const letter = th.dataset.letter;
@@ -783,7 +874,7 @@
       const d = escapeHtml(String(row.d ?? ""));
       const e = escapeHtml(String(row.e ?? ""));
       const f = escapeHtml(String(row.f ?? ""));
-      const sides = getMatchupPlayerNamesBySide(team, row.matchup);
+      const sides = getMatchupPlayerNamesBySide(team, row.matchup, year);
       tr.innerHTML = `
         <td>${escapeHtml(row.matchup)}</td>
         <td>${escapeHtml(row.dates)}</td>
@@ -856,7 +947,8 @@
     if (!tbody) return;
     const activeTab = document.querySelector(".standings-box-tabs .box-tab.active");
     const team = activeTab ? activeTab.dataset.standingsBox : "Foo Fighters";
-    const rows = getBoxPlayerTotals(team);
+    const year = getYearFrom("year-standings");
+    const rows = getBoxPlayerTotals(team, year);
     tbody.innerHTML = "";
     rows.forEach((row, i) => {
       const tr = document.createElement("tr");
@@ -1051,6 +1143,7 @@
     const form = document.getElementById("score-form");
     if (!form) return;
     if (form.league.value === "box") {
+      fillWeekOptions("box");
       autoPopulateBoxPlayersInForm();
       return;
     }
@@ -1136,8 +1229,8 @@
       e.preventDefault();
       const name = notificationsForm.notify_name.value.trim();
       const email = notificationsForm.notify_email.value.trim();
-      const isActive = !!notificationsForm.notify_active.checked;
-      const notifyRoundStandings = !!notificationsForm.notify_standings.checked;
+      const notifyHandicap = !!notificationsForm.notify_handicap.checked;
+      const notifyBox = !!notificationsForm.notify_box.checked;
       if (!name || !email) {
         notificationsStatus.textContent = "Please enter both name and email.";
         return;
@@ -1146,13 +1239,16 @@
         await saveNotificationSubscription({
           name,
           email,
-          isActive,
-          notifyMatch: isActive,
-          notifyRoundStandings,
+          notifyHandicap,
+          notifyBox,
         });
-        notificationsStatus.textContent = isActive
-          ? "Saved. You'll get match notifications and selected standings emails."
-          : "Saved. Email notifications are currently turned off.";
+        const parts = [];
+        if (notifyHandicap) parts.push("handicap league");
+        if (notifyBox) parts.push("box league");
+        notificationsStatus.textContent =
+          parts.length > 0
+            ? `Saved. You'll get email about: ${parts.join(" and ")}.`
+            : "Saved. No leagues selected — you won't receive emails until you check at least one.";
       } catch (err) {
         notificationsStatus.textContent = err.message || "Unable to save notification settings.";
       }
@@ -1166,8 +1262,8 @@
       }
       try {
         await removeNotificationSubscription(email);
-        notificationsForm.notify_active.checked = false;
-        notificationsForm.notify_standings.checked = false;
+        notificationsForm.notify_handicap.checked = false;
+        notificationsForm.notify_box.checked = false;
         notificationsStatus.textContent = "Your email has been removed from notifications.";
       } catch (err) {
         notificationsStatus.textContent = err.message || "Unable to remove email.";
