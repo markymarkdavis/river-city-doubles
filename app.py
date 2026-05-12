@@ -2,9 +2,11 @@
 River City Doubles League — Flask backend.
 Stores scores in SQLite and serves standings for handicap open/main.
 """
+import logging
 import os
-import sqlite3
 import smtplib
+import sqlite3
+import ssl
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
@@ -12,6 +14,7 @@ from flask_cors import CORS
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
+log = logging.getLogger("rcd")
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
 ASSET_VERSION = os.environ.get("RCD_ASSET_VERSION", datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
 # Optional: change this on Render (e.g. bump "2") to force every browser to reload once and drop SW + caches.
@@ -246,16 +249,21 @@ def now_iso():
 
 def send_match_notification_email(to_email, to_name: str, subject: str, body: str, html_body: str = None):
     """
-    Send an email notification.
-    Service used: SMTP (intended for SendGrid SMTP in production).
+    Send an email notification over SMTP (SendGrid, Brevo, etc.).
+    Env:
+      RCD_SMTP_HOST, RCD_SMTP_PORT (default 587), RCD_SMTP_USER, RCD_SMTP_PASS, RCD_EMAIL_FROM
+      RCD_SMTP_SSL=1 — use SMTP_SSL on RCD_SMTP_PORT (often 465) instead of STARTTLS on 587.
     """
-    smtp_host = os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net")
+    smtp_host = os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip()
     smtp_port = int(os.environ.get("RCD_SMTP_PORT", "587"))
-    smtp_user = os.environ.get("RCD_SMTP_USER", "apikey")
+    smtp_user = os.environ.get("RCD_SMTP_USER", "apikey").strip()
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
     from_email = os.environ.get("RCD_EMAIL_FROM", "rivercitydoublessquash@gmail.com").strip()
+    use_ssl = os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes")
+    timeout = int(os.environ.get("RCD_SMTP_TIMEOUT", "30"))
+
     if not smtp_pass or not from_email:
-        # App remains functional even without outbound email configured.
+        log.warning("Email skipped: set RCD_SMTP_PASS and RCD_EMAIL_FROM on the server.")
         return False, "Email config missing (RCD_SMTP_PASS and/or RCD_EMAIL_FROM)."
 
     msg = EmailMessage()
@@ -268,13 +276,21 @@ def send_match_notification_email(to_email, to_name: str, subject: str, body: st
     if html_body:
         msg.add_alternative(html_body, subtype="html")
 
+    ctx = ssl.create_default_context()
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
+        if use_ssl:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout, context=ctx) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+                server.starttls(context=ctx)
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+        log.info("Email sent: subject=%r to=%s", subject, len(recipients))
         return True, None
     except Exception as e:
+        log.warning("Email send failed (%s:%s ssl=%s): %s", smtp_host, smtp_port, use_ssl, e)
         return False, str(e)
 
 
@@ -330,9 +346,18 @@ def maybe_send_match_play_notifications(level, week, year):
         sent_keys = {(r["email"], r["team1"], r["team2"]) for r in sent_rows}
 
     if not rows or not subs:
+        log.info(
+            "Match notifications skipped (level=%s week=%s year=%s): unscored_rows=%d handicap_subscribers=%d",
+            level,
+            week,
+            year,
+            len(rows),
+            len(subs),
+        )
         return
 
     sub_by_name = {normalize_name(s["name"]): s for s in subs}
+    any_send_attempted = False
     for row in rows:
         players = split_player_names(row["team1_players"]) + split_player_names(row["team2_players"])
         if not players:
@@ -349,6 +374,7 @@ def maybe_send_match_play_notifications(level, week, year):
             recipients.append(s)
         if not recipients:
             continue
+        any_send_attempted = True
         subject = f"River City Doubles: You are scheduled to play (Week {week})"
         body = (
             f"You are listed in an upcoming {level.title()} handicap match.\n"
@@ -368,7 +394,25 @@ def maybe_send_match_play_notifications(level, week, year):
                     )
                 conn.commit()
         else:
-            print(f"Match notification group email failed ({to_emails}): {err}")
+            log.warning("Match notification group email failed (%s): %s", to_emails, err)
+
+    if subs and rows and not any_send_attempted:
+        with_players = sum(
+            1
+            for r in rows
+            if split_player_names(r["team1_players"]) or split_player_names(r["team2_players"])
+        )
+        if with_players == 0:
+            log.info(
+                "Match notifications: %d unscored schedule row(s) but no player names in schedule; match emails need team1_players/team2_players",
+                len(rows),
+            )
+        else:
+            log.info(
+                "Match notifications: %d subscriber(s) and %d row(s) with players, but no name match — subscription Name must match a player name on the schedule (same spelling)",
+                len(subs),
+                with_players,
+            )
 
 
 def maybe_send_round_standings_notifications(level, week, year):
@@ -391,6 +435,14 @@ def maybe_send_round_standings_notifications(level, week, year):
         expected = int(totals["expected"] or 0)
         completed = int(totals["completed"] or 0)
         if expected == 0 or completed < expected:
+            log.info(
+                "Standings email skipped (level=%s week=%s year=%s): expected_matches=%d completed_scores=%d",
+                level,
+                week,
+                year,
+                expected,
+                completed,
+            )
             return
 
         subs = conn.execute(
@@ -405,6 +457,11 @@ def maybe_send_round_standings_notifications(level, week, year):
         sent_emails = {r["email"] for r in sent}
 
     if not subs:
+        log.info(
+            "Standings email skipped (level=%s week=%s): week complete but no subscribers with notify_handicap",
+            level,
+            week,
+        )
         return
     standings = compute_standings_rows(level, year)
     lines = []
@@ -431,10 +488,11 @@ def maybe_send_round_standings_notifications(level, week, year):
         )
         for i, row in enumerate(standings, start=1)
     )
+    _name_ph = "{name}"
     html_body = f"""
 <html>
   <body style="font-family:Arial,sans-serif;color:#111827">
-    <p>Hi {{{{name}}}},</p>
+    <p>Hi {_name_ph},</p>
     <p>Week {week} is complete for {level.title()} handicap ({year}-{year + 1}).</p>
     <p>Current standings:</p>
     <table style='border-collapse:collapse;min-width:680px'>
@@ -477,7 +535,7 @@ def maybe_send_round_standings_notifications(level, week, year):
                 )
                 conn.commit()
         else:
-            print(f"Standings email failed for {s['email']}: {err}")
+            log.warning("Standings email failed for %s: %s", s["email"], err)
 
 
 def ensure_db_ready():
@@ -699,6 +757,50 @@ def delete_subscription():
         )
         conn.commit()
     return jsonify({"ok": True, "email": email, "is_active": False}), 200
+
+
+@app.route("/api/notifications/status")
+def notification_email_status():
+    """Whether outbound email is configured (no secrets). Check Render logs if sends still fail."""
+    smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
+    from_email = os.environ.get("RCD_EMAIL_FROM", "").strip()
+    return jsonify(
+        {
+            "smtp_configured": bool(smtp_pass and from_email),
+            "smtp_host": os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip(),
+            "smtp_port": int(os.environ.get("RCD_SMTP_PORT", "587")),
+            "smtp_ssl": os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes"),
+            "smtp_user_set": bool(os.environ.get("RCD_SMTP_USER", "").strip()),
+            "from_email_set": bool(from_email),
+            "test_endpoint_enabled": bool(os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()),
+        }
+    ), 200
+
+
+@app.route("/api/notifications/test-email", methods=["POST"])
+def notification_test_email():
+    """
+    Send a single test message if RCD_NOTIFICATION_TEST_SECRET is set on the server.
+    Body: {"secret": "<same as env>", "to": "you@example.com"}
+    """
+    expected = os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()
+    if not expected:
+        return jsonify({"error": "Test endpoint disabled (set RCD_NOTIFICATION_TEST_SECRET)"}), 404
+    data = request.get_json(silent=True) or {}
+    if (data.get("secret") or "").strip() != expected:
+        return jsonify({"error": "Invalid secret"}), 401
+    to = (data.get("to") or "").strip().lower()
+    if not to or "@" not in to:
+        return jsonify({"error": "Provide a valid to address"}), 400
+    ok, err = send_match_notification_email(
+        to,
+        "there",
+        "River City Doubles: SMTP test",
+        "If you received this, SMTP is working. You can remove RCD_NOTIFICATION_TEST_SECRET after testing.",
+    )
+    if ok:
+        return jsonify({"ok": True}), 200
+    return jsonify({"ok": False, "error": err}), 500
 
 
 def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):
