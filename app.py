@@ -12,6 +12,14 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
 

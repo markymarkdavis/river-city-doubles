@@ -5,6 +5,10 @@
 # If you already have a manually created web service, do not duplicate it: instead open
 # that service in the Dashboard → Disks → add a disk, mount e.g. /var/data, set
 # RCD_DB=/var/data/scores.db under Environment, then redeploy.
+#
+# Email notifications: after first deploy, open the web service → Environment and set
+# RCD_EMAIL_FROM + RCD_RESEND_API_KEY (recommended), or RCD_SMTP_* instead — see .env.example
+# and README "Outbound email". Optional: RCD_CRON_SECRET for POST /api/cron/notifications.
 
 services:
   - type: web
@@ -17,6 +21,14 @@ services:
     envVars:
       - key: RCD_DB
         value: /var/data/scores.db
+      - key: RCD_EMAIL_FROM
+        sync: false
+      - key: RCD_RESEND_API_KEY
+        sync: false
+      - key: RCD_CRON_SECRET
+        sync: false
+      - key: RCD_NOTIFICATION_TEST_SECRET
+        sync: false
     disk:
       name: rcd-sqlite
       mountPath: /var/data
