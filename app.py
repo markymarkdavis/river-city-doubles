@@ -57,6 +57,21 @@ TEAMS_MAIN = [
 # Exclude from team lists (e.g. test placeholders)
 TEAMS_EXCLUDED = {"A", "B"}
 
+# Box league tab names (must match static/app.js BOX_PLAYERS keys).
+BOX_TEAM_NAMES = frozenset(
+    {
+        "Foo Fighters",
+        "Pink Floyd",
+        "Dire Straits",
+        "Metallica",
+        "Nirvana",
+        "Fleetwood Mac",
+        "Guns N' Roses",
+        "Pearl Jam",
+        "Deep Purple",
+    }
+)
+
 # Open division: team name -> list of player names for that team
 TEAM_PLAYERS_OPEN = {
     "Old and in the way": ["Ros Bowers", "Eddie O'Leary", "Monty Geho", "Teddy Damgard"],
@@ -984,7 +999,9 @@ def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1
 def post_score():
     data = request.get_json() or {}
     league = (data.get("league") or "").strip().lower()
-    level = (data.get("level") or "").strip().lower()
+    level_raw = (data.get("level") or "").strip()
+    # Handicap levels are open/main (case-insensitive). Box names must keep original casing.
+    level = level_raw.lower() if league == "handicap" else level_raw
     week = data.get("week")
     team1 = (data.get("team1") or "").strip()
     team2 = (data.get("team2") or "").strip()
@@ -1000,11 +1017,24 @@ def post_score():
     if year is None:
         year = DEFAULT_SEASON_YEAR
 
-    if league not in ("box", "handicap") or level not in ("open", "main"):
-        return jsonify({"error": "Invalid league or level"}), 400
-    allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
-    if team1 not in allowed or team2 not in allowed:
-        return jsonify({"error": "Invalid team name for this level"}), 400
+    if league not in ("box", "handicap"):
+        return jsonify({"error": "Invalid league"}), 400
+
+    if league == "handicap":
+        if level not in ("open", "main"):
+            return jsonify({"error": "Invalid level for handicap"}), 400
+        allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
+        if team1 not in allowed or team2 not in allowed:
+            return jsonify({"error": "Invalid team name for this level"}), 400
+    else:
+        # Box: level is the box name; team1/team2 are sides like "A & D" (not handicap team names).
+        if level not in BOX_TEAM_NAMES:
+            return jsonify({"error": "Invalid box name"}), 400
+        if not team1 or not team2:
+            return jsonify({"error": "Both team sides are required"}), 400
+        if len(team1) > 200 or len(team2) > 200:
+            return jsonify({"error": "Team side label too long"}), 400
+
     if team1 == team2:
         return jsonify({"error": "Team 1 and Team 2 must be different"}), 400
     if not isinstance(week, int) or week < 1:
@@ -1014,8 +1044,8 @@ def post_score():
     if games1 + games2 > 5:
         return jsonify({"error": "Best of 5: total games cannot exceed 5"}), 400
 
-    # Normalize so order of teams (and thus players/handicaps) doesn't matter
-    if level in ("open", "main"):
+    # Normalize handicap match order against schedule; box sides stay as submitted.
+    if league == "handicap" and level in ("open", "main"):
         team1, team2, games1, games2, team1_players, team2_players, h1, h2 = _normalize_team_order(
             level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2
         )
@@ -1045,8 +1075,8 @@ def post_score():
                 (league, level, week, handicap, team1, team2, games1, games2, team1_players, team2_players, year),
             )
         conn.commit()
-        # Upsert schedule row for this match so spreadsheet shows players, score, winner
-        if level in ("open", "main"):
+        # Handicap schedule spreadsheet only (not box league).
+        if league == "handicap" and level in ("open", "main"):
             existing_sched = conn.execute(
                 """SELECT id FROM schedule WHERE level = ? AND week = ? AND ((team1 = ? AND team2 = ?) OR (team1 = ? AND team2 = ?)) AND (year = ? OR (year IS NULL AND ? IS NULL))""",
                 (level, week, team1, team2, team2, team1, year, year),
@@ -1066,8 +1096,9 @@ def post_score():
                 )
             conn.commit()
     try:
-        maybe_send_match_play_notifications(level, week, year)
-        maybe_send_round_standings_notifications(level, week, year)
+        if league == "handicap":
+            maybe_send_match_play_notifications(level, week, year)
+            maybe_send_round_standings_notifications(level, week, year)
     except Exception as e:
         log.warning("Notification hook after score failed: %s", e)
     return jsonify({"ok": True}), 201

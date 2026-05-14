@@ -577,13 +577,12 @@
   }
 
   async function postScore(entry) {
-    const levelForApi = entry.league === "box" ? "open" : entry.level;
     const res = await fetch(apiUrl("/api/scores"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         league: entry.league,
-        level: levelForApi,
+        level: entry.level,
         week: Number(entry.week),
         year: getYearFrom("year-input"),
         handicap_team1: entry.handicap_team1 || undefined,
