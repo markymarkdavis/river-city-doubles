@@ -234,6 +234,16 @@ body {
   color: var(--accent);
 }
 
+/* Long label: last tab "Frequently Asked Questions" */
+.tab.tab-faq {
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  max-width: 10.5rem;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: normal;
+}
+
 .tab-dropdown-wrap {
   display: inline-flex;
   align-items: center;
@@ -552,6 +562,101 @@ body {
   max-width: 100%;
 }
 
+.notifications-intro {
+  margin-bottom: 12px !important;
+}
+
+.notifications-server-hint {
+  margin: 0 0 1rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.notifications-server-hint.notifications-server-hint--warn {
+  color: #fbbf24;
+}
+
+.notifications-form .form-row {
+  max-width: 360px;
+}
+
+.notifications-fieldset {
+  margin: 0;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  max-width: 420px;
+}
+
+.notifications-fieldset-legend {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.notifications-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.notifications-check-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.notifications-check-input {
+  margin: 2px 0 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.notifications-check-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notifications-check-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.notifications-check-desc {
+  margin: 0;
+  padding-left: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.notifications-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.notifications-status {
+  margin: 0 !important;
+  max-width: 420px;
+}
+
 .standings-intro {
   margin-bottom: 20px !important;
 }
@@ -850,6 +955,79 @@ body {
 
 .rules-source a:hover {
   text-decoration: underline;
+}
+
+.faq-content {
+  margin-top: 8px;
+}
+
+.faq-content h3 {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 1.35em 0 0.5em;
+  color: var(--text);
+}
+
+.faq-content h3:first-of-type {
+  margin-top: 0;
+}
+
+.faq-content h3.faq-install-heading {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 1.75em 0 0.75em;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.faq-content h4.faq-install-sub {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin: 1.25em 0 0.4em;
+  color: var(--text);
+}
+
+.faq-content h3.faq-install-heading + h4.faq-install-sub {
+  margin-top: 0.35em;
+}
+
+.faq-content ol,
+.faq-content ul {
+  margin: 0 0 1em;
+  padding-left: 1.35em;
+}
+
+.faq-content li {
+  margin-bottom: 0.45em;
+  line-height: 1.5;
+}
+
+.faq-note {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-top: 1.5em !important;
+  margin-bottom: 0 !important;
+}
+
+.faq-install-figure {
+  margin: 0.35em 0 1em;
+  max-width: min(420px, 100%);
+}
+
+.faq-install-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.faq-install-figure figcaption {
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 @media (max-width: 768px) {

@@ -1,9 +1,12 @@
 """
 One-time seed: insert Open division 2025-2026 schedule data into the schedule table.
 Run from project root: python seed_schedule.py
+With TURSO_DATABASE_URL + TURSO_AUTH_TOKEN set, writes to Turso instead of local SQLite.
 """
 import os
 import sqlite3
+
+from rcd_db import ensure_schema, get_db, use_turso
 
 DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
 LEVEL = "open"
@@ -43,8 +46,7 @@ ROWS = [
 ]
 
 
-def main():
-    conn = sqlite3.connect(DB_PATH)
+def _seed_body(conn):
     # Clear existing open 2025 schedule and scores so this run replaces them
     conn.execute(
         "DELETE FROM schedule WHERE level = ? AND (year = ? OR year IS NULL)",
@@ -77,7 +79,21 @@ def main():
                 (LEAGUE, LEVEL, week, handicap, team1, team2, games1, games2, team1_players, team2_players, YEAR),
             )
     conn.commit()
-    conn.close()
+
+
+def main():
+    ensure_schema()
+    if use_turso():
+        with get_db() as conn:
+            _seed_body(conn)
+        n_scores = sum(1 for r in ROWS if r[2] and r[3] and r[8] is not None and r[9] is not None)
+        print(f"Inserted {len(ROWS)} schedule rows and {n_scores} scores for {LEVEL} {YEAR}. Standings updated.")
+        return
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        _seed_body(conn)
+    finally:
+        conn.close()
     n_scores = sum(1 for r in ROWS if r[2] and r[3] and r[8] is not None and r[9] is not None)
     print(f"Inserted {len(ROWS)} schedule rows and {n_scores} scores for {LEVEL} {YEAR}. Standings updated.")
 

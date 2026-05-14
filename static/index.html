@@ -59,6 +59,7 @@
         </ul>
       </li>
       <li><button type="button" class="mobile-menu-item" data-tab="fame">Wall of Fame</button></li>
+      <li><button type="button" class="mobile-menu-item" data-tab="faq">Frequently Asked Questions</button></li>
     </ul>
       </nav>
     </div>
@@ -93,6 +94,7 @@
       </div>
     </div>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="fame">Wall of Fame</button>
+    <button type="button" class="tab tab-faq" role="tab" aria-selected="false" data-tab="faq" id="tab-faq">Frequently Asked Questions</button>
   </nav>
 
   <main class="main">
@@ -294,8 +296,9 @@
     <section id="panel-notifications" class="panel" role="tabpanel" aria-labelledby="tab-notifications" hidden>
       <div class="content-card form-card">
         <h2>Email Notifications</h2>
-        <p class="standings-intro">Add your name and email to receive updates. Choose which leagues you want to hear about.</p>
-        <form id="notifications-form" class="score-form">
+        <p class="standings-intro notifications-intro">Add your name and email, then choose which leagues you want to hear from.</p>
+        <p id="notifications-server-hint" class="notifications-server-hint" role="status" aria-live="polite"></p>
+        <form id="notifications-form" class="score-form notifications-form">
           <div class="form-row">
             <label for="notify-name">Name</label>
             <input type="text" id="notify-name" name="notify_name" placeholder="Your full name" required />
@@ -304,24 +307,112 @@
             <label for="notify-email">Email</label>
             <input type="email" id="notify-email" name="notify_email" placeholder="you@example.com" required />
           </div>
-          <div class="form-row">
-            <label for="notify-handicap">Handicap league</label>
-            <input type="checkbox" id="notify-handicap" name="notify_handicap" checked />
-            <span class="form-hint" style="display:block;margin-top:4px">Match reminders when you are on the schedule, and standings email after each completed round (Open / Main).</span>
+
+          <fieldset class="notifications-fieldset">
+            <legend class="notifications-fieldset-legend">Email me about</legend>
+            <div class="notifications-checklist">
+              <div class="notifications-check-item">
+                <input
+                  type="checkbox"
+                  class="notifications-check-input"
+                  id="notify-handicap"
+                  name="notify_handicap"
+                  checked
+                  aria-describedby="notify-handicap-desc"
+                />
+                <div class="notifications-check-body">
+                  <label for="notify-handicap" class="notifications-check-title">Handicap league</label>
+                  <p id="notify-handicap-desc" class="notifications-check-desc">
+                    Open and Main: reminders when you're on the schedule, plus standings after each completed week.
+                  </p>
+                </div>
+              </div>
+              <div class="notifications-check-item">
+                <input
+                  type="checkbox"
+                  class="notifications-check-input"
+                  id="notify-box"
+                  name="notify_box"
+                  aria-describedby="notify-box-desc"
+                />
+                <div class="notifications-check-body">
+                  <label for="notify-box" class="notifications-check-title">Box league</label>
+                  <p id="notify-box-desc" class="notifications-check-desc">
+                    Box emails aren't sent yet; leave this on if you want them when we add them.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <div class="notifications-actions">
+            <button type="submit" class="btn btn-primary notifications-action-btn">Save settings</button>
+            <button type="button" class="btn notifications-action-btn" id="notify-remove">Remove my email</button>
           </div>
-          <div class="form-row">
-            <label for="notify-box">Box league</label>
-            <input type="checkbox" id="notify-box" name="notify_box" />
-            <span class="form-hint" style="display:block;margin-top:4px">Reserved for future box-league emails.</span>
-          </div>
-          <div class="form-row">
-            <button type="submit" class="btn btn-primary notifications-action-btn">Save Notification Settings</button>
-          </div>
-          <div class="form-row">
-            <button type="button" class="btn notifications-action-btn" id="notify-remove">Remove My Email</button>
-          </div>
-          <p id="notifications-status" class="form-hint" aria-live="polite"></p>
+          <p id="notifications-status" class="form-hint notifications-status" aria-live="polite"></p>
         </form>
+      </div>
+    </section>
+
+    <section id="panel-faq" class="panel" role="tabpanel" aria-labelledby="tab-faq" hidden>
+      <div class="content-card">
+        <h2>Frequently asked questions</h2>
+        <p class="standings-intro">How to enter scores and install this site as an app.</p>
+
+        <div class="faq-content">
+          <h3>How do I enter a score?</h3>
+          <ol>
+            <li>Open the <strong>Input Score</strong> tab and pick the correct <strong>season</strong> (year) from the menu next to the tab if you use more than one season.</li>
+            <li>Choose <strong>League</strong>: <strong>Handicap</strong> or <strong>Box</strong>.</li>
+            <li>
+              <strong>Handicap:</strong> Select <strong>Level</strong> (Open or Main), then <strong>Week</strong>. Choose <strong>Team 1</strong> and <strong>Team 2</strong>, enter handicaps and player names if needed, then games won for each side (best of five). Submit.
+            </li>
+            <li>
+              <strong>Box:</strong> Under <strong>Box</strong>, pick your <strong>box</strong> (team name), then <strong>Week</strong>. Team sides and player names fill in from the schedule; adjust if needed, enter games won, and submit.
+            </li>
+            <li>If something errors, check that teams, week, and games (0–3 each side, total at most 5) are valid.</li>
+          </ol>
+
+          <h3 class="faq-install-heading">Install as an app</h3>
+
+          <h4 class="faq-install-sub">Chrome on Android</h4>
+          <figure class="faq-install-figure">
+            <img
+              src="/faq-chrome-android-home.png"
+              alt="Illustration: Chrome menu (three dots) open with Add to Home screen highlighted"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>Tap <strong>⋮</strong> (top right in Chrome), then choose <strong>Add to Home screen</strong> or <strong>Install app</strong>.</figcaption>
+          </figure>
+          <ol>
+            <li>Open the site in <strong>Chrome</strong>.</li>
+            <li>Tap the <strong>⋮</strong> menu → <strong>Add to Home screen</strong> or <strong>Install app</strong>.</li>
+            <li>Confirm to add the icon; launch it like any other app.</li>
+          </ol>
+
+          <h4 class="faq-install-sub">Safari on iPhone or iPad</h4>
+          <figure class="faq-install-figure">
+            <img
+              src="/faq-safari-ios-home.png"
+              alt="Illustration: Safari share icon and Add to Home Screen in the share sheet"
+              loading="lazy"
+              decoding="async"
+            />
+            <figcaption>Tap <strong>Share</strong> (square with arrow up), scroll the sheet, then tap <strong>Add to Home Screen</strong>.</figcaption>
+          </figure>
+          <ol>
+            <li>Open the site in <strong>Safari</strong>.</li>
+            <li>Tap the <strong>Share</strong> button (square with arrow up).</li>
+            <li>Scroll and tap <strong>Add to Home Screen</strong>, edit the label if you like, then tap <strong>Add</strong>.</li>
+            <li>Open the league from your home screen icon.</li>
+          </ol>
+
+          <p class="faq-note">
+            This site uses a <strong>service worker</strong> so it can load faster after the first visit. If updates look stale, try a normal refresh; the server may also prompt a refresh after deploys.
+            The pictures above are <strong>simplified diagrams</strong>—menus and labels can look slightly different on your phone or after a browser update.
+          </p>
+        </div>
       </div>
     </section>
 

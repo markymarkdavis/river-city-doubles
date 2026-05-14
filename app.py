@@ -2,20 +2,24 @@
 River City Doubles League — Flask backend.
 Stores scores in SQLite and serves standings for handicap open/main.
 """
+import json
 import logging
 import os
 import smtplib
 import sqlite3
 import ssl
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
 
+from rcd_db import DB_PATH, get_db, use_turso
+
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="")
 log = logging.getLogger("rcd")
-DB_PATH = os.environ.get("RCD_DB", os.path.join(os.path.dirname(__file__), "scores.db"))
 ASSET_VERSION = os.environ.get("RCD_ASSET_VERSION", datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
 # Optional: change this on Render (e.g. bump "2") to force every browser to reload once and drop SW + caches.
 CLIENT_RELOAD_BUMP = os.environ.get("RCD_CLIENT_RELOAD_BUMP", "").strip()
@@ -114,11 +118,9 @@ SEASON_YEARS = [2025, 2026]
 # When a request omits year, keep 2025–2026 as the default handicap season
 DEFAULT_SEASON_YEAR = 2025
 
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+# libsql (Turso) raises ValueError for many SQL errors; sqlite3 uses OperationalError.
+_SCHEMA_ERRORS = (sqlite3.OperationalError, ValueError)
+_DB_API_ERRORS = (sqlite3.Error, ValueError)
 
 
 def init_db():
@@ -142,11 +144,11 @@ def init_db():
         for col in ("team1_players", "team2_players"):
             try:
                 conn.execute(f"ALTER TABLE scores ADD COLUMN {col} TEXT")
-            except sqlite3.OperationalError:
+            except _SCHEMA_ERRORS:
                 pass
         try:
             conn.execute("ALTER TABLE scores ADD COLUMN year INTEGER")
-        except sqlite3.OperationalError:
+        except _SCHEMA_ERRORS:
             pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS schedule (
@@ -167,7 +169,7 @@ def init_db():
         """)
         try:
             conn.execute("ALTER TABLE schedule ADD COLUMN year INTEGER")
-        except sqlite3.OperationalError:
+        except _SCHEMA_ERRORS:
             pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS email_subscriptions (
@@ -184,12 +186,12 @@ def init_db():
         for col, default in (("notify_match", "1"), ("notify_round_standings", "0")):
             try:
                 conn.execute(f"ALTER TABLE email_subscriptions ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}")
-            except sqlite3.OperationalError:
+            except _SCHEMA_ERRORS:
                 pass
         for col, default in (("notify_handicap", "0"), ("notify_box", "0")):
             try:
                 conn.execute(f"ALTER TABLE email_subscriptions ADD COLUMN {col} INTEGER NOT NULL DEFAULT {default}")
-            except sqlite3.OperationalError:
+            except _SCHEMA_ERRORS:
                 pass
         # One-time backfill: legacy match/standings flags → handicap league bucket.
         try:
@@ -197,7 +199,7 @@ def init_db():
                 """UPDATE email_subscriptions SET notify_handicap = 1
                    WHERE (notify_match = 1 OR notify_round_standings = 1) AND notify_handicap = 0"""
             )
-        except sqlite3.OperationalError:
+        except _SCHEMA_ERRORS:
             pass
         conn.execute("""
             CREATE TABLE IF NOT EXISTS match_notifications_sent (
@@ -247,32 +249,64 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def send_match_notification_email(to_email, to_name: str, subject: str, body: str, html_body: str = None):
-    """
-    Send an email notification over SMTP (SendGrid, Brevo, etc.).
-    Env:
-      RCD_SMTP_HOST, RCD_SMTP_PORT (default 587), RCD_SMTP_USER, RCD_SMTP_PASS, RCD_EMAIL_FROM
-      RCD_SMTP_SSL=1 — use SMTP_SSL on RCD_SMTP_PORT (often 465) instead of STARTTLS on 587.
-    """
+def _outbound_from_email():
+    """Verified From address; defaults to legacy Gmail if unset (SMTP setups)."""
+    raw = os.environ.get("RCD_EMAIL_FROM", "").strip()
+    return raw or "rivercitydoublessquash@gmail.com"
+
+
+def _email_transport_configured():
+    """True if Resend API key or SMTP password is set (From always has a default for SMTP)."""
+    if os.environ.get("RCD_RESEND_API_KEY", "").strip():
+        return True
+    return bool(os.environ.get("RCD_SMTP_PASS", "").strip())
+
+
+def _send_resend(api_key, from_email, recipients, subject, text_content, html_body):
+    payload = {"from": from_email, "to": recipients, "subject": subject, "text": text_content}
+    if html_body:
+        payload["html"] = html_body
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=int(os.environ.get("RCD_RESEND_TIMEOUT", "30"))) as resp:
+            resp.read()
+        log.info("Resend email sent: subject=%r to=%s", subject, len(recipients))
+        return True, None
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        try:
+            msg = json.loads(err_body).get("message", err_body)
+        except json.JSONDecodeError:
+            msg = err_body or str(e)
+        log.warning("Resend API failed: %s", msg)
+        return False, msg
+    except Exception as e:
+        log.warning("Resend send failed: %s", e)
+        return False, str(e)
+
+
+def _send_smtp(from_email, recipients, subject, text_content, html_body):
     smtp_host = os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip()
     smtp_port = int(os.environ.get("RCD_SMTP_PORT", "587"))
     smtp_user = os.environ.get("RCD_SMTP_USER", "apikey").strip()
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
-    from_email = os.environ.get("RCD_EMAIL_FROM", "rivercitydoublessquash@gmail.com").strip()
     use_ssl = os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes")
     timeout = int(os.environ.get("RCD_SMTP_TIMEOUT", "30"))
-
-    if not smtp_pass or not from_email:
-        log.warning("Email skipped: set RCD_SMTP_PASS and RCD_EMAIL_FROM on the server.")
-        return False, "Email config missing (RCD_SMTP_PASS and/or RCD_EMAIL_FROM)."
 
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
-    recipients = to_email if isinstance(to_email, list) else [to_email]
     msg["To"] = ", ".join(recipients)
-    greeting = "Hi everyone" if len(recipients) > 1 else f"Hi {to_name}"
-    msg.set_content(f"{greeting},\n\n{body}\n\n- River City Doubles")
+    msg.set_content(text_content)
     if html_body:
         msg.add_alternative(html_body, subtype="html")
 
@@ -287,11 +321,68 @@ def send_match_notification_email(to_email, to_name: str, subject: str, body: st
                 server.starttls(context=ctx)
                 server.login(smtp_user, smtp_pass)
                 server.send_message(msg)
-        log.info("Email sent: subject=%r to=%s", subject, len(recipients))
+        log.info("SMTP email sent: subject=%r to=%s", subject, len(recipients))
         return True, None
     except Exception as e:
         log.warning("Email send failed (%s:%s ssl=%s): %s", smtp_host, smtp_port, use_ssl, e)
         return False, str(e)
+
+
+def send_match_notification_email(to_email, to_name: str, subject: str, body: str, html_body: str = None):
+    """
+    Send notification email via Resend (HTTP) or SMTP.
+
+    Configure one of:
+      • RCD_RESEND_API_KEY — Resend (https://resend.com); set RCD_EMAIL_FROM to a verified sender.
+      • RCD_SMTP_PASS — SMTP (SendGrid, Brevo, etc.); optional RCD_EMAIL_FROM (defaults if unset).
+
+    Optional SMTP: RCD_SMTP_HOST, RCD_SMTP_PORT (default 587), RCD_SMTP_USER (default apikey),
+    RCD_SMTP_SSL=1 for implicit TLS (e.g. port 465).
+    """
+    from_email = _outbound_from_email()
+    resend_key = os.environ.get("RCD_RESEND_API_KEY", "").strip()
+    smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
+
+    if not resend_key and not smtp_pass:
+        log.warning("Email skipped: set RCD_RESEND_API_KEY or RCD_SMTP_PASS on the server.")
+        return False, "Email config missing (RCD_RESEND_API_KEY or RCD_SMTP_PASS)."
+
+    recipients = to_email if isinstance(to_email, list) else [to_email]
+    greeting = "Hi everyone" if len(recipients) > 1 else f"Hi {to_name}"
+    text_content = f"{greeting},\n\n{body}\n\n- River City Doubles"
+
+    if resend_key:
+        return _send_resend(resend_key, from_email, recipients, subject, text_content, html_body)
+    return _send_smtp(from_email, recipients, subject, text_content, html_body)
+
+
+def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool, notify_box: bool):
+    """Best-effort confirmation after a new subscription row is created."""
+    if not (notify_handicap or notify_box):
+        return False, None
+    if not _email_transport_configured():
+        return False, None
+    topics = []
+    if notify_handicap:
+        topics.append(
+            "Handicap league — reminders when you're on the schedule (until the match is scored), "
+            "and standings after each week once all matches that week have scores."
+        )
+    if notify_box:
+        topics.append("Box league — we'll email you when box notifications are available.")
+    lines = "\n".join(f"• {t}" for t in topics)
+    body = (
+        "You're signed up for River City Doubles email updates.\n\n"
+        f"We may send:\n{lines}\n\n"
+        "If you didn't request this, you can ignore this message or use Remove my email on the site.\n"
+    )
+    display_name = name.strip() if name else "there"
+    return send_match_notification_email(
+        email,
+        display_name,
+        "River City Doubles: You're subscribed",
+        body,
+    )
 
 
 def compute_standings_rows(level, year):
@@ -558,7 +649,7 @@ def seed_if_empty():
             ).fetchone()
             if existing and existing["c"] > 0:
                 return
-    except sqlite3.Error:
+    except _DB_API_ERRORS:
         # If we can't even query schedule, let the API path surface the error.
         return
 
@@ -688,11 +779,13 @@ def upsert_subscription():
 
     init_db()
     ts = now_iso()
+    welcome_email_sent = False
     with get_db() as conn:
         existing = conn.execute(
             "SELECT id FROM email_subscriptions WHERE email = ?",
             (email,),
         ).fetchone()
+        is_new = existing is None
         if existing:
             conn.execute(
                 """UPDATE email_subscriptions
@@ -729,6 +822,11 @@ def upsert_subscription():
                 ),
             )
         conn.commit()
+    if is_new and is_active:
+        ok, _err = maybe_send_subscription_welcome(email, name, notify_handicap, notify_box)
+        welcome_email_sent = bool(ok)
+        if not ok and _email_transport_configured():
+            log.warning("Subscription welcome email failed for %s", email)
     return jsonify(
         {
             "ok": True,
@@ -736,6 +834,7 @@ def upsert_subscription():
             "is_active": is_active,
             "notify_handicap": notify_handicap,
             "notify_box": notify_box,
+            "welcome_email_sent": welcome_email_sent,
         }
     ), 200
 
@@ -762,10 +861,14 @@ def delete_subscription():
 @app.route("/api/notifications/status")
 def notification_email_status():
     """Whether outbound email is configured (no secrets). Check Render logs if sends still fail."""
+    resend = bool(os.environ.get("RCD_RESEND_API_KEY", "").strip())
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
     from_email = os.environ.get("RCD_EMAIL_FROM", "").strip()
     return jsonify(
         {
+            "turso_configured": use_turso(),
+            "email_transport_configured": _email_transport_configured(),
+            "resend_configured": resend,
             "smtp_configured": bool(smtp_pass and from_email),
             "smtp_host": os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip(),
             "smtp_port": int(os.environ.get("RCD_SMTP_PORT", "587")),
@@ -773,6 +876,7 @@ def notification_email_status():
             "smtp_user_set": bool(os.environ.get("RCD_SMTP_USER", "").strip()),
             "from_email_set": bool(from_email),
             "test_endpoint_enabled": bool(os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()),
+            "cron_endpoint_enabled": bool(os.environ.get("RCD_CRON_SECRET", "").strip()),
         }
     ), 200
 
@@ -781,6 +885,7 @@ def notification_email_status():
 def notification_test_email():
     """
     Send a single test message if RCD_NOTIFICATION_TEST_SECRET is set on the server.
+    Uses the same transport as live mail (RCD_RESEND_API_KEY or SMTP + RCD_EMAIL_FROM).
     Body: {"secret": "<same as env>", "to": "you@example.com"}
     """
     expected = os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()
@@ -801,6 +906,53 @@ def notification_test_email():
     if ok:
         return jsonify({"ok": True}), 200
     return jsonify({"ok": False, "error": err}), 500
+
+
+def run_notification_checks_for_all_weeks():
+    """
+    Re-run handicap match + standings notification logic for every configured season year,
+    Open/Main, and handicap week. Safe to call repeatedly: sent-* tables prevent duplicates.
+    """
+    weeks = sorted(WEEK_DATE_RANGES.keys())
+    years = list(SEASON_YEARS) if SEASON_YEARS else [DEFAULT_SEASON_YEAR]
+    for year in years:
+        for level in ("open", "main"):
+            for week in weeks:
+                try:
+                    maybe_send_match_play_notifications(level, week, year)
+                    maybe_send_round_standings_notifications(level, week, year)
+                except Exception as e:
+                    log.warning(
+                        "Notification tick failed level=%s week=%s year=%s: %s",
+                        level,
+                        week,
+                        year,
+                        e,
+                    )
+
+
+@app.route("/api/cron/notifications", methods=["POST", "GET"])
+def cron_notifications():
+    """
+    Wake the notification logic on a schedule (Render Cron, GitHub Actions, etc.).
+    Set RCD_CRON_SECRET; send the same value as header X-RCD-Cron, JSON body secret, or ?secret= (GET is weaker).
+
+    Example (Render Cron Job, daily):
+      curl -X POST -H "X-RCD-Cron: YOUR_SECRET" https://your-app.onrender.com/api/cron/notifications
+    """
+    expected = os.environ.get("RCD_CRON_SECRET", "").strip()
+    if not expected:
+        return jsonify({"error": "Cron disabled (set RCD_CRON_SECRET)"}), 404
+    supplied = (request.headers.get("X-RCD-Cron") or "").strip()
+    if not supplied and request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        supplied = (data.get("secret") or "").strip()
+    if not supplied:
+        supplied = (request.args.get("secret") or "").strip()
+    if supplied != expected:
+        return jsonify({"error": "Invalid secret"}), 401
+    run_notification_checks_for_all_weeks()
+    return jsonify({"ok": True}), 200
 
 
 def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):
@@ -917,7 +1069,7 @@ def post_score():
         maybe_send_match_play_notifications(level, week, year)
         maybe_send_round_standings_notifications(level, week, year)
     except Exception as e:
-        print(f"Notification hook failed: {e}")
+        log.warning("Notification hook after score failed: %s", e)
     return jsonify({"ok": True}), 201
 
 
@@ -940,7 +1092,7 @@ def get_standings(league, level):
                    WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
                 (league, level, year),
             ).fetchall()
-    except sqlite3.Error as e:
+    except _DB_API_ERRORS as e:
         return jsonify({"error": "Database error", "detail": str(e)}), 500
 
     for r in rows:
@@ -978,7 +1130,7 @@ def get_schedule():
                           handicap, score, winner FROM schedule WHERE level = ? AND (year = ? OR year IS NULL) ORDER BY week, id""",
                 (level, year),
             ).fetchall()
-    except sqlite3.Error as e:
+    except _DB_API_ERRORS as e:
         return jsonify({"error": "Database error", "detail": str(e)}), 500
     # Deduplicate: same (week, team pair) can appear twice; prefer the row that has a score
     by_key = {}
@@ -1036,7 +1188,7 @@ def post_schedule():
         year = int((data.get("year") or DEFAULT_SEASON_YEAR))
         maybe_send_match_play_notifications(level, week, year)
     except Exception as e:
-        print(f"Schedule notification hook failed: {e}")
+        log.warning("Schedule notification hook failed: %s", e)
     return jsonify({"ok": True}), 201
 
 
@@ -1045,10 +1197,12 @@ if __name__ == "__main__":
     try:
         with get_db() as conn:
             n = conn.execute(
-                "SELECT COUNT(*) FROM scores WHERE league = ? AND level IN ('open', 'main')",
+                "SELECT COUNT(*) AS c FROM scores WHERE league = ? AND level IN ('open', 'main')",
                 ("handicap",),
-            ).fetchone()[0]
-        print(f"Using database: {DB_PATH} ({n} handicap scores)")
+            ).fetchone()["c"]
+        label = "Turso (libsql)" if use_turso() else DB_PATH
+        print(f"Using database: {label} ({n} handicap scores)")
     except Exception as e:
-        print(f"Using database: {DB_PATH} (check failed: {e})")
+        label = "Turso (libsql)" if use_turso() else DB_PATH
+        print(f"Using database: {label} (check failed: {e})")
     app.run(debug=True, port=5000)

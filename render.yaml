@@ -1,0 +1,23 @@
+# Render Blueprint — SQLite on a persistent disk so scores and email subscriptions
+# survive deploys and restarts. Persistent disks are not available on the Free web tier;
+# this uses the Starter plan. See README "Persist database on Render".
+#
+# If you already have a manually created web service, do not duplicate it: instead open
+# that service in the Dashboard → Disks → add a disk, mount e.g. /var/data, set
+# RCD_DB=/var/data/scores.db under Environment, then redeploy.
+
+services:
+  - type: web
+    name: river-city-doubles
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /health
+    envVars:
+      - key: RCD_DB
+        value: /var/data/scores.db
+    disk:
+      name: rcd-sqlite
+      mountPath: /var/data
+      sizeGB: 1

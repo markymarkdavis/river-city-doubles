@@ -633,6 +633,32 @@
     return res.json();
   }
 
+  async function fetchNotificationEmailStatus() {
+    const res = await fetchWithTimeout(apiUrl("/api/notifications/status")).catch(() => null);
+    if (!res || !res.ok) return null;
+    return res.json();
+  }
+
+  async function refreshNotificationsServerHint() {
+    const el = document.getElementById("notifications-server-hint");
+    if (!el) return;
+    const data = await fetchNotificationEmailStatus();
+    if (!data) {
+      el.textContent = "";
+      el.classList.remove("notifications-server-hint--warn");
+      return;
+    }
+    if (!data.email_transport_configured) {
+      el.textContent =
+        "Your preferences are saved here. This site has not been given a mail provider yet, so no messages will be delivered until the host configures that.";
+      el.classList.add("notifications-server-hint--warn");
+      return;
+    }
+    el.classList.remove("notifications-server-hint--warn");
+    el.textContent =
+      "The server can send email. Handicap reminders and week-complete standings run when scores are submitted; a daily cron is optional for an extra pass.";
+  }
+
   async function fetchStandings(league, level) {
     const year = getYearFrom("year-standings");
     const url = `${apiUrl(`/api/standings/${encodeURIComponent(league)}/${encodeURIComponent(level)}`)}?year=${year}`;
@@ -803,6 +829,7 @@
     if (tabId === "standings") renderStandings();
     if (tabId === "schedule") renderSchedule();
     if (tabId === "rules") updateRulesContent();
+    if (tabId === "notifications") refreshNotificationsServerHint();
   }
 
   let currentRulesView = "doubles";
@@ -1279,7 +1306,7 @@
         return;
       }
       try {
-        await saveNotificationSubscription({
+        const data = await saveNotificationSubscription({
           name,
           email,
           notifyHandicap,
@@ -1288,10 +1315,15 @@
         const parts = [];
         if (notifyHandicap) parts.push("handicap league");
         if (notifyBox) parts.push("box league");
-        notificationsStatus.textContent =
+        let msg =
           parts.length > 0
             ? `Saved. You'll get email about: ${parts.join(" and ")}.`
             : "Saved. No leagues selected — you won't receive emails until you check at least one.";
+        if (data.welcome_email_sent) {
+          msg += " Check your inbox for a short confirmation message.";
+        }
+        notificationsStatus.textContent = msg;
+        refreshNotificationsServerHint();
       } catch (err) {
         notificationsStatus.textContent = err.message || "Unable to save notification settings.";
       }

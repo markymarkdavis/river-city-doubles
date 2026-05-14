@@ -1,0 +1,42 @@
+# Daily ping to POST /api/cron/notifications (see app.py).
+#
+# Schedule: GitHub Actions cron is UTC-only. This runs at 13:00 UTC, which is:
+#   • 8:00 AM US Eastern Standard Time (roughly Nov–Mar)
+#   • 9:00 AM US Eastern Daylight Time (roughly Mar–Nov)
+# To target 8:00 AM Eastern during daylight saving instead, use: '0 12 * * *'
+# (that is 7:00 AM during standard time). Pick the line that fits your season.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   NOTIFICATIONS_CRON_URL   — full URL, e.g. https://YOUR-APP.onrender.com/api/cron/notifications
+#   NOTIFICATIONS_CRON_SECRET — must match RCD_CRON_SECRET on your Render (or other) host
+#
+# Manual run: Actions → "Daily notification cron" → Run workflow
+
+name: Daily notification cron
+
+on:
+  schedule:
+    # 13:00 UTC — see timezone note at top of file
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run notification checks on server
+        env:
+          CRON_URL: ${{ secrets.NOTIFICATIONS_CRON_URL }}
+          CRON_SECRET: ${{ secrets.NOTIFICATIONS_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::Add Actions secrets NOTIFICATIONS_CRON_URL and NOTIFICATIONS_CRON_SECRET (same secret value as RCD_CRON_SECRET on the server)."
+            exit 1
+          fi
+          echo "POST $CRON_URL"
+          curl -fsS -X POST "$CRON_URL" \
+            -H "X-RCD-Cron: $CRON_SECRET" \
+            -H "Accept: application/json"
+          echo ""
+          echo "OK"
