@@ -353,10 +353,69 @@
     return BOX_PLAYERS[team] || {};
   }
 
-  function getBoxScheduleRowsForYear(team, year) {
+  /** Built-in sheet rows (dates / demo scores) before merging API scores. */
+  function getStaticBoxScheduleRowsForYear(team, year) {
     const y = seasonBoxYear(year);
     if (y === 2026 && BOX_SCHEDULES_2026[team]) return BOX_SCHEDULES_2026[team];
     return BOX_SCHEDULES[team] || [];
+  }
+
+  const boxScheduleMergeCache = new Map();
+
+  function buildMergedBoxScheduleRowList(team, year, apiRows) {
+    const staticList = getStaticBoxScheduleRowsForYear(team, year);
+    const staticByMatchup = {};
+    staticList.forEach((r) => {
+      staticByMatchup[r.matchup] = r;
+    });
+    const byWeek = new Map();
+    (apiRows || []).forEach((r) => {
+      byWeek.set(Number(r.week), r);
+    });
+    return FULL_BOX_MATCHUPS.map((m, idx) => {
+      const week = idx + 1;
+      const db = byWeek.get(week);
+      const staticRec = staticByMatchup[m.matchup];
+      const dates = (staticRec && staticRec.dates) || m.dates;
+      if (db != null) {
+        return {
+          matchup: m.matchup,
+          dates,
+          team1: Number(db.games1),
+          team2: Number(db.games2),
+        };
+      }
+      if (staticRec) {
+        return {
+          matchup: m.matchup,
+          dates,
+          team1: staticRec.team1,
+          team2: staticRec.team2,
+        };
+      }
+      return { matchup: m.matchup, dates, team1: "", team2: "" };
+    });
+  }
+
+  function getBoxScheduleRowsForYear(team, year) {
+    const key = `${team}|${seasonBoxYear(year)}`;
+    if (boxScheduleMergeCache.has(key)) {
+      return boxScheduleMergeCache.get(key);
+    }
+    return buildMergedBoxScheduleRowList(team, year, []);
+  }
+
+  async function refreshBoxScoresMergeCache(team, year) {
+    const key = `${team}|${seasonBoxYear(year)}`;
+    const url = `${apiUrl("/api/box/scores")}?team=${encodeURIComponent(team)}&year=${encodeURIComponent(String(seasonBoxYear(year)))}`;
+    const res = await fetchWithTimeout(url).catch(() => null);
+    if (!res || !res.ok) {
+      boxScheduleMergeCache.set(key, buildMergedBoxScheduleRowList(team, year, []));
+      return;
+    }
+    const data = await res.json().catch(() => []);
+    const rows = Array.isArray(data) ? data : [];
+    boxScheduleMergeCache.set(key, buildMergedBoxScheduleRowList(team, year, rows));
   }
 
   // Get player totals for a box, sorted by total descending.
@@ -687,13 +746,13 @@
   const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings"];
   let rcdYearSelectListenersAttached = false;
 
-  function refreshUiForSeasonYear() {
+  async function refreshUiForSeasonYear() {
     void renderScheduleTable("open");
     void renderScheduleTable("main");
-    renderBoxSchedule();
+    await renderBoxSchedule();
     void renderStandingsTable("handicap-open");
     void renderStandingsTable("handicap-main");
-    renderBoxStandings();
+    await renderBoxStandings();
     const form = document.getElementById("score-form");
     if (form && form.league.value === "box") {
       fillWeekOptions("box");
@@ -709,7 +768,7 @@
       const s = document.getElementById(sid);
       if (s) s.value = String(year);
     });
-    refreshUiForSeasonYear();
+    void refreshUiForSeasonYear();
   }
 
   function fillYearOptions(years) {
@@ -796,7 +855,7 @@
           const s = document.getElementById(sid);
           if (s) s.value = v;
         });
-        refreshUiForSeasonYear();
+        void refreshUiForSeasonYear();
       }
       YEAR_SELECT_IDS.forEach((id) => {
         const sel = document.getElementById(id);
@@ -825,8 +884,8 @@
       panel.classList.add("active");
       panel.hidden = false;
     }
-    if (tabId === "standings") renderStandings();
-    if (tabId === "schedule") renderSchedule();
+    if (tabId === "standings") void renderStandings();
+    if (tabId === "schedule") void renderSchedule();
     if (tabId === "rules") updateRulesContent();
     if (tabId === "notifications") refreshNotificationsServerHint();
   }
@@ -843,7 +902,7 @@
 
   async function fetchSchedule(level) {
     if (level === "box") {
-      // Box league schedule is static, per-team, not from the API
+      // Box schedule is rendered by renderBoxSchedule (static sheet merged with /api/box/scores).
       return null;
     }
     const year = getYearFrom("year-schedule");
@@ -867,7 +926,7 @@
       p.hidden = id !== level;
     });
     if (level === "box") {
-      renderBoxSchedule();
+      void renderBoxSchedule();
     } else {
       renderScheduleTable(level);
     }
@@ -906,18 +965,26 @@
     }
   }
 
-  function renderSchedule() {
-    renderScheduleTable("open");
-    renderScheduleTable("main");
-    renderBoxSchedule();
+  async function renderSchedule() {
+    void renderScheduleTable("open");
+    void renderScheduleTable("main");
+    await renderBoxSchedule();
   }
 
-  function renderBoxSchedule() {
+  async function renderBoxSchedule() {
     const tbody = document.getElementById("schedule-tbody-box");
     if (!tbody) return;
-    const activeTab = document.querySelector(".box-tab.active");
+    const activeTab = document.querySelector("#schedule-panel-box .box-tab.active");
     const team = activeTab ? activeTab.dataset.boxTeam : "Foo Fighters";
     const year = getYearFrom("year-schedule");
+    try {
+      await refreshBoxScoresMergeCache(team, year);
+    } catch (err) {
+      boxScheduleMergeCache.set(
+        `${team}|${seasonBoxYear(year)}`,
+        buildMergedBoxScheduleRowList(team, year, [])
+      );
+    }
     const rows = getFullBoxRows(team, year);
     tbody.innerHTML = "";
 
@@ -999,7 +1066,7 @@
       p.hidden = id !== standingsId;
     });
     if (standingsId === "box") {
-      renderBoxStandings();
+      void renderBoxStandings();
     } else {
       renderStandingsTable(standingsId);
     }
@@ -1011,12 +1078,20 @@
     return div.innerHTML;
   }
 
-  function renderBoxStandings() {
+  async function renderBoxStandings() {
     const tbody = document.getElementById("tbody-standings-box");
     if (!tbody) return;
     const activeTab = document.querySelector(".standings-box-tabs .box-tab.active");
     const team = activeTab ? activeTab.dataset.standingsBox : "Foo Fighters";
     const year = getYearFrom("year-standings");
+    try {
+      await refreshBoxScoresMergeCache(team, year);
+    } catch (err) {
+      boxScheduleMergeCache.set(
+        `${team}|${seasonBoxYear(year)}`,
+        buildMergedBoxScheduleRowList(team, year, [])
+      );
+    }
     const rows = getBoxPlayerTotals(team, year);
     tbody.innerHTML = "";
     rows.forEach((row, i) => {
@@ -1058,10 +1133,10 @@
     }
   }
 
-  function renderStandings() {
-    renderStandingsTable("handicap-open");
-    renderStandingsTable("handicap-main");
-    renderBoxStandings();
+  async function renderStandings() {
+    void renderStandingsTable("handicap-open");
+    void renderStandingsTable("handicap-main");
+    await renderBoxStandings();
   }
 
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -1177,7 +1252,7 @@
       document.querySelectorAll("#schedule-panel-box .box-tab").forEach((t) => {
         t.classList.toggle("active", t === btn);
       });
-      renderBoxSchedule();
+      void renderBoxSchedule();
     });
   });
 
@@ -1186,7 +1261,7 @@
       document.querySelectorAll(".standings-box-tabs .box-tab").forEach((t) => {
         t.classList.toggle("active", t === btn);
       });
-      renderBoxStandings();
+      void renderBoxStandings();
     });
   });
 
@@ -1273,6 +1348,13 @@
         team1_players: team1Players || undefined,
         team2_players: team2Players || undefined,
       });
+      if (league === "box") {
+        boxScheduleMergeCache.clear();
+        const yIn = getYearFrom("year-input");
+        await refreshBoxScoresMergeCache(level, yIn);
+        void renderBoxSchedule();
+        void renderBoxStandings();
+      }
       form.week.value = "";
       form.week.selectedIndex = 0;
       form.handicap_team1.value = "";

@@ -995,6 +995,44 @@ def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1
     return (t1, t2, games1, games2, team1_players, team2_players, h1, h2)
 
 
+@app.route("/api/box/scores", methods=["GET"])
+def get_box_scores():
+    """Return saved box-league scores for one box and season (for client standings/schedule aggregation)."""
+    team = (request.args.get("team") or "").strip()
+    year = request.args.get("year", type=int)
+    if year is None:
+        year = DEFAULT_SEASON_YEAR
+    if team not in BOX_TEAM_NAMES:
+        return jsonify({"error": "Invalid box name"}), 400
+    try:
+        ensure_db_ready()
+        with get_db() as conn:
+            rows = conn.execute(
+                """SELECT week, team1, team2, games1, games2, team1_players, team2_players, year
+                   FROM scores
+                   WHERE league = 'box' AND level = ? AND (year = ? OR year IS NULL)
+                   ORDER BY week""",
+                (team, year),
+            ).fetchall()
+    except _DB_API_ERRORS as e:
+        return jsonify({"error": "Database error", "detail": str(e)}), 500
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "week": int(r["week"]),
+                "team1": r["team1"] or "",
+                "team2": r["team2"] or "",
+                "games1": int(r["games1"]),
+                "games2": int(r["games2"]),
+                "team1_players": r["team1_players"] or "",
+                "team2_players": r["team2_players"] or "",
+                "year": r["year"],
+            }
+        )
+    return jsonify(out), 200
+
+
 @app.route("/api/scores", methods=["POST"])
 def post_score():
     data = request.get_json() or {}
