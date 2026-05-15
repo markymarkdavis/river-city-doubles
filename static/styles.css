@@ -803,6 +803,16 @@ body {
   color: var(--text);
 }
 
+#panel-players .standings-table tbody td:nth-child(2) {
+  word-break: break-word;
+  max-width: 16rem;
+  font-size: 0.875rem;
+}
+
+#panel-players .standings-table tbody td:nth-child(2) a {
+  color: var(--accent);
+}
+
 .schedule-tabs {
   display: flex;
   gap: 4px;

@@ -1289,6 +1289,74 @@
   }
 
   /**
+   * Email from Doubles Box League contact sheet (Google Sheets roster tab).
+   * Keys: lowercase "First Last" matching canonicalPlayerName output / site rosters.
+   * @see https://docs.google.com/spreadsheets/d/1NO0RHEdLnpe-VxI7Kges6ZV0__HDBTFaStxT2aVZIYA/edit?gid=752038658
+   */
+  const PLAYER_CONTACT_EMAILS = new Map([
+    ["charles kempe", "charleskempe@gmail.com"],
+    ["jeff clarke", "clarke_j@bellsouth.net"],
+    ["spencer williamson", "tspencerwilliamson4@gmail.com"],
+    ["manoli loupassi", "manoli@loupassilaw.com"],
+    ["rand robins", "randrobins@gmail.com"],
+    ["teddy damgard", "tdamgard@gmail.com"],
+    ["andy mack", "Andymack33@gmail.com"],
+    ["skylyr phillips", "skyphil15@gmail.com"],
+    ["moses maxfield", "mosesmaxfield@gmail.com"],
+    ["berkeley edmunds", "Berkeley.edmunds@me.com"],
+    ["jim maxwell", "jim@maxwellassc.com"],
+    ["jimmy cooke", "cookelaw@yahoo.com"],
+    ["matt chriss", "mchriss23@gmail.com"],
+    ["bob reynolds", "robert.reynolds@comcast.net"],
+    ["ned sinnott", "nedsinnott@verizon.net"],
+    ["michael jarvis", "mjarvisjr@gmail.com"],
+    ["bt thornton", "btandc123@gmail.com"],
+    ["eddie o'leary", "eddie@teamcolab.com"],
+    ["grant stevens", "s.grantstevens@gmail.com"],
+    ["scott harrison", "Scott.Harrison@jll.com"],
+    ["nitin sethi", "sethin1@gmail.com"],
+    ["jim davis", "jdavis@richmond.edu"],
+    ["john street", "john.street@epitomenetworks.com"],
+    ["monty geho", "Mgeho@investdavenport.com"],
+    ["jon rasich", "jmrasich@gmail.com"],
+    ["alan burke", "alanburkeaboutface@gmail.com"],
+    ["heidi stevenson", "heidik.stevenson@gmail.com"],
+    ["shelton horsley", "SHorsley@tswinvest.com"],
+    ["george stephenson", "georgeestephenson11@gmail.com"],
+    ["david shepardson", "dshepardson7@gmail.com"],
+    ["sanjay hinduja", "sanjay.s.hinduja@gmail.com"],
+    ["robert angle", "robert.angle13@gmail.com"],
+    ["jim bonbright", "jbonbright@lindencapital.net"],
+    ["rob long", "robertclong3@gmail.com"],
+    ["jimmy meadows", "Jcmeadow8189@gmail.com"],
+    ["trey packard", "tpackard@harriswilliams.com"],
+    ["josh wishnack", "josh@mulberryinvestments.com"],
+    ["ros bowers", "RBowers@brockenbroughinc.com"],
+    ["michael halloran", "michael@halloranhomesrva.com"],
+    ["peter thacker", "thackerpnj@gmail.com"],
+    ["matt rho", "matt.rho@gmail.com"],
+    ["deesh bhattal", "deeshbhattal@gmail.com"],
+    ["billy miller", "millerw90@gmail.com"],
+    ["nick farrell", "nicholaspfarrell@gmail.com"],
+    ["rick morris", "rick@mulberryinvestments.com"],
+    ["tommy richards", "tommytennis56@hotmail.com"],
+    ["austin brockenbough", "abiv@brockenbroughinc.com"],
+    ["alan stone", "alan.stone74@gmail.com"],
+    ["robert gentil", "robert.gentil@gmail.com"],
+    ["tom mitchell", "tmitch4charis@gmail.com"],
+    ["john patton", "jspattonjr@gmail.com"],
+    ["jack hager", "jvhager@gmail.com"],
+    ["mukul paithane", "mukul.paithane@etelic.com"],
+    ["mark davis", "md8294@gmail.com"],
+  ]);
+
+  function lookupPlayerContactEmail(displayName) {
+    const canon = canonicalPlayerName(displayName);
+    const k = canon.trim().toLowerCase();
+    return PLAYER_CONTACT_EMAILS.get(k) || "";
+  }
+
+  /**
    * Handicap division + schedule team for the Players tab. For these names, schedule
    * rows are ignored so each person shows exactly one division/team (keys: lowercase display name).
    */
@@ -1403,8 +1471,10 @@
     }
     const out = [...byKey.values()].map((r) => {
       const hcParts = sortedHandicapPairParts(r.hcPairs);
+      const email = lookupPlayerContactEmail(r.displayName);
       return {
         name: r.displayName,
+        email,
         box: [...r.boxes].sort((a, b) => a.localeCompare(b)).join(", ") || "—",
         handicapDivision: formatHandicapDivisionColumn(hcParts),
         handicapTeam: formatHandicapTeamColumn(hcParts),
@@ -1423,23 +1493,26 @@
     const tbody = document.getElementById("tbody-players");
     if (!tbody) return;
     const year = getYearFrom("year-players");
-    tbody.innerHTML = "<tr><td colspan=\"4\">Loading…</td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"5\">Loading…</td></tr>";
     try {
       const rows = await buildPlayersDirectoryRows(year);
       tbody.innerHTML = "";
       if (rows.length === 0) {
         tbody.innerHTML =
-          '<tr><td colspan="4" class="empty-state">No players found for this season.</td></tr>';
+          '<tr><td colspan="5" class="empty-state">No players found for this season.</td></tr>';
         return;
       }
       rows.forEach((row) => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.box)}</td><td>${escapeHtml(row.handicapDivision)}</td><td>${escapeHtml(row.handicapTeam)}</td>`;
+        const emailCell =
+          row.email &&
+          `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`;
+        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${emailCell || "—"}</td><td>${escapeHtml(row.box)}</td><td>${escapeHtml(row.handicapDivision)}</td><td>${escapeHtml(row.handicapTeam)}</td>`;
         tbody.appendChild(tr);
       });
     } catch (err) {
       const msg = err && err.message ? err.message : "Unable to load players.";
-      tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(msg)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(msg)}</td></tr>`;
     }
   }
 
