@@ -9,6 +9,11 @@
 # Email notifications: after first deploy, open the web service → Environment and set
 # RCD_EMAIL_FROM + RCD_RESEND_API_KEY (recommended), or RCD_SMTP_* instead — see .env.example
 # and README "Outbound email". Optional: RCD_CRON_SECRET for POST /api/cron/notifications.
+#
+# If you created the web service manually (not from this blueprint), add a Cron Job in the
+# Dashboard with schedule "5 15 * * *" (15:05 UTC = 10:05 AM EST) and startCommand:
+#   python scripts/run_notification_cron.py
+# Set RCD_CRON_SECRET (same as the web service) on the cron job.
 
 services:
   - type: web
@@ -35,3 +40,15 @@ services:
       name: rcd-sqlite
       mountPath: /var/data
       sizeGB: 1
+
+  - type: cron
+    name: river-city-doubles-notifications
+    runtime: python
+    schedule: "5 15 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/run_notification_cron.py
+    envVars:
+      - key: RCD_CRON_SECRET
+        sync: false
+      - key: RCD_NOTIFICATIONS_CRON_URL
+        value: https://river-city-doubles.onrender.com/api/cron/notifications

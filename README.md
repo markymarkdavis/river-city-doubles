@@ -71,7 +71,7 @@ Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/te
 
 **Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The daily job only evaluates the **current handicap season year** and **week(s) for today** (US Eastern by default): **match reminders** for unscored matches in this week (only when today’s date is inside that week’s range); **standings** for this week when complete, and for the prior week only on the day after that week ends. Submitting a handicap score triggers **standings** emails only (not match reminders).
 
-**GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` at 9:40 AM Eastern with `X-RCD-Cron`.
+**GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` at 10:05 AM Eastern with `X-RCD-Cron`.
 
 **Render free tier: site “hangs” or times out**  
 Free web services spin down after ~15 minutes of inactivity. The first request after that triggers a **cold start** (often 30–90 seconds), so the site can look like it’s hanging. Options:
@@ -154,7 +154,8 @@ flowchart TB
 | ---- | -------------------- |
 | **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
 | **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
-| **GitHub Actions — `notifications-cron.yml`** | Daily at **14:40 UTC** (~9:40 AM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **15:05 UTC** (~10:05 AM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
+| **Render Cron — `river-city-doubles-notifications`** | Same schedule (**15:05 UTC** / ~10:05 AM EST), runs `python scripts/run_notification_cron.py` with `RCD_CRON_SECRET` (see `render.yaml`). |
 | **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
 | **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
 | **Render** | Hosts the Flask app (`render.yaml`: **Gunicorn**, health check `/health`, optional **persistent disk** at `/var/data` with `RCD_DB=/var/data/scores.db`). |
