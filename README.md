@@ -152,7 +152,7 @@ flowchart TB
 | ---- | -------------------- |
 | **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
 | **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
-| **GitHub Actions — `notifications-cron.yml`** | Daily at **13:30 UTC** (~8:30 AM US Eastern in standard time), `POST`s the hosted `/api/cron/notifications` using secrets `NOTIFICATIONS_CRON_URL` and `NOTIFICATIONS_CRON_SECRET` (must match `RCD_CRON_SECRET` on Render). |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **14:18 UTC** (~9:18 AM US Eastern in standard time), `POST`s the hosted `/api/cron/notifications` using secrets `NOTIFICATIONS_CRON_URL` and `NOTIFICATIONS_CRON_SECRET` (must match `RCD_CRON_SECRET` on Render). |
 | **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
 | **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
 | **Render** | Hosts the Flask app (`render.yaml`: **Gunicorn**, health check `/health`, optional **persistent disk** at `/var/data` with `RCD_DB=/var/data/scores.db`). |
