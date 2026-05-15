@@ -16,7 +16,7 @@ services:
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 90 app:app
     healthCheckPath: /health
     envVars:
       - key: RCD_DB
@@ -24,6 +24,8 @@ services:
       - key: RCD_EMAIL_FROM
         sync: false
       - key: RCD_RESEND_API_KEY
+        sync: false
+      - key: RCD_BREVO_API_KEY
         sync: false
       - key: RCD_CRON_SECRET
         sync: false

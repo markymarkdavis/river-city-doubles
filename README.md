@@ -39,13 +39,14 @@ If you skip a disk and stay on Free, treat the hosted DB as **temporary** unless
 
 ### Outbound email (notifications)
 
-The app sends mail through **either** [Resend](https://resend.com) (HTTPS) **or** SMTP (e.g. SendGrid, Brevo). Set on the server:
+The app sends mail through **Resend** (HTTPS), **Brevo API** (HTTPS, recommended on Render), or **SMTP** (e.g. Brevo relay). Set on the server:
 
 | Variable | Purpose |
 | -------- | ------- |
 | `RCD_EMAIL_FROM` | **Recommended.** From address; Resend requires a verified domain/sender. If unset, a legacy default is used for SMTP only. |
 | `RCD_RESEND_API_KEY` | If set, mail goes through Resend (no SMTP password needed). |
-| `RCD_SMTP_PASS` | If Resend is not set, SMTP is used with this password. |
+| `RCD_BREVO_API_KEY` | **Recommended on Render.** Brevo transactional API key (SMTP & API → API keys & MCP — not the SMTP password). |
+| `RCD_SMTP_PASS` | SMTP relay password if API keys are not used. |
 | `RCD_SMTP_HOST` | Optional; default `smtp.sendgrid.net`. |
 | `RCD_SMTP_PORT` | Optional; default `587`. |
 | `RCD_SMTP_USER` | Optional; default `apikey` (SendGrid). |
@@ -54,14 +55,19 @@ The app sends mail through **either** [Resend](https://resend.com) (HTTPS) **or*
 
 Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/test-email` with JSON `{"secret":"…","to":"you@example.com"}` to verify delivery. The same request also accepts **`RCD_CRON_SECRET`** (header `X-RCD-Cron` or JSON `secret`).
 
+**HTML 500 on test-email** — Often Gunicorn killing the worker while SMTP hangs. Prefer **`RCD_BREVO_API_KEY`** (HTTPS) over SMTP on Render, or check logs for the real error.
+
 **Email not sending (Brevo on Render)** — `/api/notifications/status` can show `smtp_configured: true` while sends still fail. Check:
 
-1. **`RCD_EMAIL_FROM`** must be a **verified sender** in Brevo (Transactional → Senders). Use the exact address, or `River City Doubles <you@yourdomain.com>`.
-2. **`RCD_SMTP_USER`** must be your **Brevo account login email**, not the From address unless they are the same.
-3. **`RCD_SMTP_PASS`** must be the **SMTP key** from Brevo (Transactional → SMTP & API), not the HTTP API key.
-4. **`RCD_SMTP_HOST`** = `smtp-relay.brevo.com`, **`RCD_SMTP_PORT`** = `587`, leave **`RCD_SMTP_SSL`** unset (STARTTLS).
-5. After saving on the site, the API may return **`welcome_email_error`** with the SMTP error text — also check **Render → Logs** for `Email send failed`.
-6. Test after deploy: `curl -X POST https://river-city-doubles.onrender.com/api/notifications/test-email -H "X-RCD-Cron: YOUR_RCD_CRON_SECRET" -H "Content-Type: application/json" -d '{"to":"you@example.com"}'`
+1. **`RCD_BREVO_API_KEY`** (easiest): Brevo → **SMTP & API** → **API keys & MCP** → create key → set on Render. Keep `RCD_EMAIL_FROM=rivercitydoublessquash@gmail.com` (verified sender).
+2. **`RCD_EMAIL_FROM`** must be a **verified sender** in Brevo (see below).
+3. **`RCD_SMTP_USER`** is the **SMTP login** from Brevo (often `something@smtp-brevo.com`), only if using SMTP instead of the API key.
+4. **`RCD_SMTP_PASS`** must be the **SMTP key** from Brevo (Transactional → SMTP & API), not the HTTP API key.
+5. **`RCD_SMTP_HOST`** = `smtp-relay.brevo.com`, **`RCD_SMTP_PORT`** = `587`, leave **`RCD_SMTP_SSL`** unset (STARTTLS).
+6. After saving on the site, the API may return **`welcome_email_error`** with the SMTP error text — also check **Render → Logs** for `Email send failed`.
+7. Test after deploy: `curl -X POST https://river-city-doubles.onrender.com/api/notifications/test-email -H "X-RCD-Cron: YOUR_RCD_CRON_SECRET" -H "Content-Type: application/json" -d '{"to":"you@example.com"}'`
+
+**Where to verify senders in Brevo (not under Transactional):** open [Senders list](https://app.brevo.com/senders/list) or **your account menu (top right) → Settings → Senders, domains & IPs → Senders**. Click **Add a sender**, enter the same email you use for `RCD_EMAIL_FROM`, and complete the verification code Brevo emails to that address. Better long-term: **Domains** tab → authenticate your domain (DKIM), then any `@yourdomain.com` sender is allowed.
 
 **Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The repo includes a GitHub Actions workflow that pings this daily; match reminders and standings also run when someone submits a handicap score.
 

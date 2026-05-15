@@ -24,6 +24,7 @@ except ImportError:
 
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 
 from box_rosters import get_box_roster_dict
 from rcd_db import DB_PATH, get_db, use_turso
@@ -49,6 +50,17 @@ def no_cache_api(response):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
     return response
+
+
+@app.errorhandler(Exception)
+def api_unhandled_exception(e):
+    """Return JSON for API errors (avoids generic HTML 500 from the WSGI server)."""
+    if isinstance(e, HTTPException):
+        return e
+    if request.path.startswith("/api/"):
+        log.exception("Unhandled API error on %s", request.path)
+        return jsonify({"ok": False, "error": str(e)}), 500
+    raise
 
 TEAMS_OPEN = [
     "Even Older and Grumpier",
@@ -312,8 +324,10 @@ def _smtp_from_addresses(from_email: str) -> tuple[str, str]:
 
 
 def _email_transport_configured():
-    """True if Resend API key or SMTP password is set (From always has a default for SMTP)."""
+    """True if any outbound email transport is configured."""
     if os.environ.get("RCD_RESEND_API_KEY", "").strip():
+        return True
+    if os.environ.get("RCD_BREVO_API_KEY", "").strip():
         return True
     return bool(os.environ.get("RCD_SMTP_PASS", "").strip())
 
@@ -350,13 +364,58 @@ def _send_resend(api_key, from_email, recipients, subject, text_content, html_bo
         return False, str(e)
 
 
+def _send_brevo_api(api_key, from_email, recipients, subject, text_content, html_body=None):
+    """Brevo transactional email over HTTPS (preferred on Render when SMTP times out)."""
+    try:
+        from_header, envelope_from = _smtp_from_addresses(from_email)
+    except ValueError as e:
+        return False, str(e)
+    name, _addr = parseaddr(from_header)
+    if not name:
+        name = os.environ.get("RCD_EMAIL_FROM_NAME", "River City Doubles").strip() or "River City Doubles"
+    payload = {
+        "sender": {"name": name, "email": envelope_from},
+        "to": [{"email": r} for r in recipients],
+        "subject": subject,
+        "textContent": text_content,
+    }
+    if html_body:
+        payload["htmlContent"] = html_body
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=data,
+        method="POST",
+        headers={"api-key": api_key, "Content-Type": "application/json", "accept": "application/json"},
+    )
+    try:
+        timeout = int(os.environ.get("RCD_BREVO_API_TIMEOUT", "30"))
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            resp.read()
+        log.info("Brevo API email sent: subject=%r to=%s", subject, recipients)
+        return True, None
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(err_body)
+            msg = parsed.get("message") or parsed.get("code") or err_body
+        except json.JSONDecodeError:
+            msg = err_body or str(e)
+        log.warning("Brevo API failed: %s", msg)
+        return False, msg
+    except Exception as e:
+        log.warning("Brevo API send failed: %s", e)
+        return False, str(e)
+
+
 def _send_smtp(from_email, recipients, subject, text_content, html_body):
     smtp_host = os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip()
     smtp_port = int(os.environ.get("RCD_SMTP_PORT", "587"))
     smtp_user = os.environ.get("RCD_SMTP_USER", "apikey").strip()
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
     use_ssl = os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes")
-    timeout = int(os.environ.get("RCD_SMTP_TIMEOUT", "30"))
+    # Stay under Gunicorn's default 30s worker timeout so Flask can return JSON errors.
+    timeout = int(os.environ.get("RCD_SMTP_TIMEOUT", "25"))
 
     if not smtp_pass:
         return False, "RCD_SMTP_PASS is not set"
@@ -409,18 +468,20 @@ def send_match_notification_email(to_email, to_name: str, subject: str, body: st
 
     Configure one of:
       • RCD_RESEND_API_KEY — Resend (https://resend.com); set RCD_EMAIL_FROM to a verified sender.
-      • RCD_SMTP_PASS — SMTP (SendGrid, Brevo, etc.); optional RCD_EMAIL_FROM (defaults if unset).
+      • RCD_BREVO_API_KEY — Brevo HTTP API (recommended on Render; get key under SMTP & API → API keys).
+      • RCD_SMTP_PASS — SMTP (Brevo relay, etc.); optional RCD_EMAIL_FROM (defaults if unset).
 
     Optional SMTP: RCD_SMTP_HOST, RCD_SMTP_PORT (default 587), RCD_SMTP_USER (default apikey),
     RCD_SMTP_SSL=1 for implicit TLS (e.g. port 465).
     """
     from_email = _outbound_from_email()
     resend_key = os.environ.get("RCD_RESEND_API_KEY", "").strip()
+    brevo_key = os.environ.get("RCD_BREVO_API_KEY", "").strip()
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
 
-    if not resend_key and not smtp_pass:
-        log.warning("Email skipped: set RCD_RESEND_API_KEY or RCD_SMTP_PASS on the server.")
-        return False, "Email config missing (RCD_RESEND_API_KEY or RCD_SMTP_PASS)."
+    if not resend_key and not brevo_key and not smtp_pass:
+        log.warning("Email skipped: set RCD_RESEND_API_KEY, RCD_BREVO_API_KEY, or RCD_SMTP_PASS.")
+        return False, "Email config missing (RCD_BREVO_API_KEY or RCD_SMTP_PASS recommended)."
 
     recipients = to_email if isinstance(to_email, list) else [to_email]
     greeting = "Hi everyone" if len(recipients) > 1 else f"Hi {to_name}"
@@ -428,6 +489,8 @@ def send_match_notification_email(to_email, to_name: str, subject: str, body: st
 
     if resend_key:
         return _send_resend(resend_key, from_email, recipients, subject, text_content, html_body)
+    if brevo_key:
+        return _send_brevo_api(brevo_key, from_email, recipients, subject, text_content, html_body)
     return _send_smtp(from_email, recipients, subject, text_content, html_body)
 
 
@@ -1137,6 +1200,7 @@ def delete_subscription():
 def notification_email_status():
     """Whether outbound email is configured (no secrets). Check Render logs if sends still fail."""
     resend = bool(os.environ.get("RCD_RESEND_API_KEY", "").strip())
+    brevo_api = bool(os.environ.get("RCD_BREVO_API_KEY", "").strip())
     smtp_pass = os.environ.get("RCD_SMTP_PASS", "").strip()
     from_email = os.environ.get("RCD_EMAIL_FROM", "").strip()
     return jsonify(
@@ -1144,6 +1208,7 @@ def notification_email_status():
             "turso_configured": use_turso(),
             "email_transport_configured": _email_transport_configured(),
             "resend_configured": resend,
+            "brevo_api_configured": brevo_api,
             "smtp_configured": bool(smtp_pass),
             "from_email_hint": (from_email[:3] + "…" if len(from_email) > 3 else "") if from_email else "using default From (set RCD_EMAIL_FROM to your Brevo-verified sender)",
             "smtp_host": os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip(),
@@ -1178,15 +1243,19 @@ def notification_test_email():
         return jsonify({"error": "Provide a valid to address"}), 400
     kind = (data.get("kind") or "smtp").strip().lower()
     name = " ".join((data.get("name") or "there").strip().split()) or "there"
-    if kind == "example":
-        ok, err = send_example_notification_email(to, name)
-    else:
-        ok, err = send_match_notification_email(
-            to,
-            name,
-            "River City Doubles: SMTP test",
-            "If you received this, SMTP is working. You can remove RCD_NOTIFICATION_TEST_SECRET after testing.",
-        )
+    try:
+        if kind == "example":
+            ok, err = send_example_notification_email(to, name)
+        else:
+            ok, err = send_match_notification_email(
+                to,
+                name,
+                "River City Doubles: SMTP test",
+                "If you received this, SMTP is working. You can remove RCD_NOTIFICATION_TEST_SECRET after testing.",
+            )
+    except Exception as e:
+        log.exception("test-email unexpected error")
+        return jsonify({"ok": False, "error": str(e)}), 500
     if ok:
         return jsonify({"ok": True, "kind": kind, "to": to}), 200
     return jsonify({"ok": False, "error": err}), 500
