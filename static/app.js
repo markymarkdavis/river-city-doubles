@@ -412,7 +412,8 @@
     const y = seasonBoxYear(year);
     if (yearUsesExplicitBoxList(y)) {
       const p = (BOX_PLAYERS_BY_YEAR[y] || {})[team];
-      return p && typeof p === "object" ? p : {};
+      if (p && typeof p === "object" && Object.keys(p).length > 0) return p;
+      return BOX_PLAYERS[team] || {};
     }
     return BOX_PLAYERS[team] || {};
   }

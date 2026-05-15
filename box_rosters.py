@@ -101,8 +101,13 @@ def year_uses_explicit_box_list(year: int) -> bool:
 
 
 def get_box_roster_dict(team: str, year: int) -> dict[str, str]:
-    """Mirror static/app.js getBoxPlayersForYear (sheet roster only)."""
+    """Mirror static/app.js getBoxPlayersForYear (sheet roster); fallback for notification matching."""
     y = int(year)
     if year_uses_explicit_box_list(y):
-        return dict(BOX_PLAYERS_BY_YEAR.get(y, {}).get(team) or {})
+        explicit = BOX_PLAYERS_BY_YEAR.get(y, {}).get(team)
+        if explicit:
+            return dict(explicit)
+        # Partial year overrides (e.g. only one box tab for 2026): use default sheet for other teams
+        # so notify_box subscribers still match canonical names.
+        return dict(BOX_PLAYERS.get(team) or {})
     return dict(BOX_PLAYERS.get(team) or {})

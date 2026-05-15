@@ -760,15 +760,16 @@ def normalized_names_on_box_for_year(conn, box_team: str, year: int) -> set[str]
     return norms
 
 
-def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
+def maybe_send_box_score_notifications(box_team: str, week: int, year: int) -> int:
     """
     After a box score is saved, email notify_box subscribers whose name is on that
     box roster for this season (sheet + any names on existing scores for the box).
     One email per subscriber per (box, week, year); requires notify_box = 1.
+    Returns number of emails successfully sent.
     """
     init_db()
     if box_team not in BOX_TEAM_NAMES:
-        return
+        return 0
     with get_db() as conn:
         subs = conn.execute(
             """SELECT name, email FROM email_subscriptions
@@ -783,7 +784,7 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
         sent_emails = {r["email"] for r in sent_rows}
 
     if not subs:
-        return
+        return 0
     if not roster_norms:
         log.info(
             "Box score notifications skipped (team=%s week=%s year=%s): no roster or player names on scores for this box",
@@ -791,9 +792,10 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
             week,
             year,
         )
-        return
+        return 0
 
     subject = f"River City Doubles: {box_team} — week {week} score update"
+    sent_count = 0
     for s in subs:
         nn = normalize_name(s["name"])
         if nn not in roster_norms:
@@ -807,6 +809,7 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
         )
         ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
         if ok:
+            sent_count += 1
             with get_db() as conn:
                 conn.execute(
                     """INSERT OR IGNORE INTO box_score_notifications_sent
@@ -818,6 +821,40 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
             sent_emails.add(s["email"])
         else:
             log.warning("Box score notification failed for %s: %s", s["email"], err)
+    return sent_count
+
+
+def sweep_box_score_notifications_for_season_years() -> int:
+    """
+    Re-run box notifications for every distinct saved box score in configured season years.
+    Idempotent (box_score_notifications_sent); used by cron so box mail can send when the
+    handicap season is inactive or the POST hook missed / mail failed once.
+    """
+    allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
+    init_db()
+    total = 0
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT level, week, year FROM scores WHERE league = 'box'"""
+        ).fetchall()
+    for r in rows:
+        box_team = (r["level"] or "").strip()
+        week = int(r["week"])
+        y_raw = r["year"]
+        y = int(y_raw) if y_raw is not None else DEFAULT_SEASON_YEAR
+        if y_raw is not None and y not in allowed:
+            continue
+        try:
+            total += maybe_send_box_score_notifications(box_team, week, y)
+        except Exception as e:
+            log.warning(
+                "Box notification sweep failed team=%s week=%s year=%s: %s",
+                box_team,
+                week,
+                y,
+                e,
+            )
+    return total
 
 
 def maybe_send_match_play_notifications(
@@ -1459,9 +1496,16 @@ def run_notification_checks_for_today(on_date: date | None = None):
         "standings_weeks": ctx.get("standings_weeks", []),
         "match_emails_sent": 0,
         "standings_emails_sent": 0,
+        "box_emails_sent": 0,
         "errors": 0,
         "skipped": None,
     }
+    try:
+        stats["box_emails_sent"] = sweep_box_score_notifications_for_season_years()
+    except Exception as e:
+        stats["errors"] += 1
+        log.warning("Box notification sweep failed: %s", e)
+
     if year is None:
         stats["skipped"] = "no active handicap season for this date"
         log.info("Notification cron skipped: %s (%s)", stats["skipped"], on_date)
