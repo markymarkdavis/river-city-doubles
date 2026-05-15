@@ -1,10 +1,10 @@
 # Daily ping to POST /api/cron/notifications (see app.py).
 # Server only sends mail for today's handicap season year and relevant week(s).
 #
-# Schedule: GitHub Actions cron is UTC-only. This runs at 14:18 UTC, which is:
-#   • 9:18 AM US Eastern Standard Time (roughly Nov–Mar)
-#   • 10:18 AM US Eastern Daylight Time (roughly Mar–Nov)
-# To target 9:18 AM Eastern during daylight saving instead, use: '18 13 * * *'
+# Schedule: GitHub Actions cron is UTC-only. This runs at 14:40 UTC, which is:
+#   • 9:40 AM US Eastern Standard Time (roughly Nov–Mar)
+#   • 10:40 AM US Eastern Daylight Time (roughly Mar–Nov)
+# To target 9:40 AM Eastern during daylight saving instead, use: '40 13 * * *'
 # (that is 8:18 AM during standard time). Pick the line that fits your season.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
@@ -17,8 +17,8 @@ name: Daily notification cron
 
 on:
   schedule:
-    # 14:18 UTC — see timezone note at top of file
-    - cron: "18 14 * * *"
+    # 14:40 UTC — see timezone note at top of file
+    - cron: "40 14 * * *"
   workflow_dispatch: {}
 
 jobs:
