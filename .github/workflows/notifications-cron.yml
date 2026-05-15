@@ -8,11 +8,11 @@
 # Manual runs (workflow_dispatch) do not prove the schedule is enabled — check the runs list
 # for events labeled "schedule", not only "workflow_dispatch".
 #
-# Schedule: GitHub Actions cron is UTC-only. This runs at 15:20 UTC, which is:
-#   • 10:20 AM US Eastern Standard Time (roughly Nov–Mar)
-#   • 11:20 AM US Eastern Daylight Time (roughly Mar–Nov)
-# To target 10:20 AM Eastern during daylight saving instead, use: '20 14 * * *'
-# (that is 9:20 AM during standard time). Pick the line that fits your season.
+# Schedule: GitHub Actions cron is UTC-only. This runs at 21:00 UTC, which is:
+#   • 4:00 PM US Eastern Standard Time (roughly Nov–Mar)
+#   • 5:00 PM US Eastern Daylight Time (roughly Mar–Nov)
+# To target 4:00 PM Eastern during daylight saving instead, use: '0 20 * * *'
+# (that is 3:00 PM during standard time). Pick the line that fits your season.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   NOTIFICATIONS_CRON_URL   — full URL, e.g. https://YOUR-APP.onrender.com/api/cron/notifications
@@ -24,8 +24,8 @@ name: Daily notification cron
 
 on:
   schedule:
-    # 15:20 UTC — see timezone note at top of file
-    - cron: "20 15 * * *"
+    # 21:00 UTC — see timezone note at top of file
+    - cron: "0 21 * * *"
   workflow_dispatch: {}
 
 permissions:
