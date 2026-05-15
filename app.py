@@ -294,6 +294,19 @@ def split_player_names(value: str):
     return out
 
 
+def players_for_schedule_match(level: str, team1: str, team2: str, team1_players: str, team2_players: str) -> list:
+    """Player names for a schedule row; falls back to static team rosters when schedule fields are empty."""
+    players = split_player_names(team1_players) + split_player_names(team2_players)
+    if players:
+        return players
+    rosters = TEAM_PLAYERS_OPEN if level == "open" else TEAM_PLAYERS_MAIN
+    for team in (team1 or "", team2 or ""):
+        team = team.strip()
+        if team and team in rosters:
+            players.extend(rosters[team])
+    return players
+
+
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
@@ -595,7 +608,9 @@ def handicap_schedule_player_norms_for_level(conn, level: str, year: int) -> set
         (level, year),
     ).fetchall()
     for r in rows:
-        for p in split_player_names(r["team1_players"]) + split_player_names(r["team2_players"]):
+        for p in players_for_schedule_match(
+            level, r["team1"] or "", r["team2"] or "", r["team1_players"] or "", r["team2_players"] or ""
+        ):
             norms.add(normalize_name(p))
     return norms
 
@@ -615,7 +630,9 @@ def normalized_player_handicap_levels_for_year(conn, year: int) -> dict[str, set
         lev = (r["level"] or "").strip().lower()
         if lev not in ("open", "main"):
             continue
-        for p in split_player_names(r["team1_players"]) + split_player_names(r["team2_players"]):
+        for p in players_for_schedule_match(
+            lev, r["team1"] or "", r["team2"] or "", r["team1_players"] or "", r["team2_players"] or ""
+        ):
             k = normalize_name(p)
             if not k:
                 continue
@@ -721,6 +738,9 @@ def maybe_send_match_play_notifications(level, week, year):
             """SELECT team1, team2, team1_players, team2_players
                FROM schedule
                WHERE level = ? AND week = ? AND (year = ? OR year IS NULL)
+                 AND team1 IS NOT NULL AND TRIM(team1) <> ''
+                 AND team2 IS NOT NULL AND TRIM(team2) <> ''
+                 AND (bye IS NULL OR TRIM(bye) = '')
                  AND (score IS NULL OR TRIM(score) = '')""",
             (level, week, year),
         ).fetchall()
@@ -745,12 +765,19 @@ def maybe_send_match_play_notifications(level, week, year):
             len(rows),
             len(subs),
         )
-        return
+        return 0
 
     sub_by_name = {normalize_name(s["name"]): s for s in subs}
     any_send_attempted = False
+    sent_count = 0
     for row in rows:
-        players = split_player_names(row["team1_players"]) + split_player_names(row["team2_players"])
+        players = players_for_schedule_match(
+            level,
+            row["team1"] or "",
+            row["team2"] or "",
+            row["team1_players"] or "",
+            row["team2_players"] or "",
+        )
         if not players:
             continue
         players_norm = {normalize_name(p) for p in players}
@@ -778,6 +805,7 @@ def maybe_send_match_play_notifications(level, week, year):
         to_emails = [r["email"] for r in recipients]
         ok, err = send_match_notification_email(to_emails, "players", subject, body)
         if ok:
+            sent_count += len(recipients)
             with get_db() as conn:
                 for r in recipients:
                     conn.execute(
@@ -794,7 +822,13 @@ def maybe_send_match_play_notifications(level, week, year):
         with_players = sum(
             1
             for r in rows
-            if split_player_names(r["team1_players"]) or split_player_names(r["team2_players"])
+            if players_for_schedule_match(
+                level,
+                r["team1"] or "",
+                r["team2"] or "",
+                r["team1_players"] or "",
+                r["team2_players"] or "",
+            )
         )
         if with_players == 0:
             log.info(
@@ -807,6 +841,7 @@ def maybe_send_match_play_notifications(level, week, year):
                 len(subs),
                 with_players,
             )
+    return sent_count
 
 
 def maybe_send_round_standings_notifications(level, week, year):
@@ -840,7 +875,7 @@ def maybe_send_round_standings_notifications(level, week, year):
                 expected,
                 completed,
             )
-            return
+            return 0
 
         subs = conn.execute(
             """SELECT name, email FROM email_subscriptions
@@ -861,7 +896,7 @@ def maybe_send_round_standings_notifications(level, week, year):
             level,
             week,
         )
-        return
+        return 0
     standings = compute_standings_rows(level, year)
     lines = []
     for i, row in enumerate(standings, start=1):
@@ -921,7 +956,7 @@ def maybe_send_round_standings_notifications(level, week, year):
             week,
             year,
         )
-        return
+        return 0
     before_filter = len(pending)
     pending = [
         s
@@ -934,9 +969,10 @@ def maybe_send_round_standings_notifications(level, week, year):
             level,
             week,
         )
-        return
+        return 0
     if not pending:
-        return
+        return 0
+    sent_count = 0
     for s in pending:
         ok, err = send_match_notification_email(
             s["email"],
@@ -946,6 +982,7 @@ def maybe_send_round_standings_notifications(level, week, year):
             html_body=html_body.replace("{name}", s["name"]),
         )
         if ok:
+            sent_count += 1
             with get_db() as conn:
                 conn.execute(
                     """INSERT OR IGNORE INTO round_standings_notifications_sent
@@ -956,6 +993,7 @@ def maybe_send_round_standings_notifications(level, week, year):
                 conn.commit()
         else:
             log.warning("Standings email failed for %s: %s", s["email"], err)
+    return sent_count
 
 
 def ensure_db_ready():
@@ -1294,13 +1332,17 @@ def run_notification_checks_for_all_weeks():
     """
     weeks = sorted(WEEK_DATE_RANGES.keys())
     years = list(SEASON_YEARS) if SEASON_YEARS else [DEFAULT_SEASON_YEAR]
+    stats = {"match_emails_sent": 0, "standings_emails_sent": 0, "errors": 0}
     for year in years:
         for level in ("open", "main"):
             for week in weeks:
                 try:
-                    maybe_send_match_play_notifications(level, week, year)
-                    maybe_send_round_standings_notifications(level, week, year)
+                    stats["match_emails_sent"] += maybe_send_match_play_notifications(level, week, year) or 0
+                    stats["standings_emails_sent"] += (
+                        maybe_send_round_standings_notifications(level, week, year) or 0
+                    )
                 except Exception as e:
+                    stats["errors"] += 1
                     log.warning(
                         "Notification tick failed level=%s week=%s year=%s: %s",
                         level,
@@ -1308,6 +1350,7 @@ def run_notification_checks_for_all_weeks():
                         year,
                         e,
                     )
+    return stats
 
 
 @app.route("/api/cron/notifications", methods=["POST", "GET"])
@@ -1330,8 +1373,8 @@ def cron_notifications():
         supplied = (request.args.get("secret") or "").strip()
     if supplied != expected:
         return jsonify({"error": "Invalid secret"}), 401
-    run_notification_checks_for_all_weeks()
-    return jsonify({"ok": True}), 200
+    stats = run_notification_checks_for_all_weeks()
+    return jsonify({"ok": True, **stats}), 200
 
 
 def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):
