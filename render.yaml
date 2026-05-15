@@ -11,7 +11,7 @@
 # and README "Outbound email". Optional: RCD_CRON_SECRET for POST /api/cron/notifications.
 #
 # If you created the web service manually (not from this blueprint), add a Cron Job in the
-# Dashboard with schedule "5 15 * * *" (15:05 UTC = 10:05 AM EST) and startCommand:
+# Dashboard with schedule "20 15 * * *" (15:20 UTC = 10:20 AM EST) and startCommand:
 #   python scripts/run_notification_cron.py
 # Set RCD_CRON_SECRET (same as the web service) on the cron job.
 
@@ -44,7 +44,7 @@ services:
   - type: cron
     name: river-city-doubles-notifications
     runtime: python
-    schedule: "5 15 * * *"
+    schedule: "20 15 * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python scripts/run_notification_cron.py
     envVars:
