@@ -5,6 +5,9 @@ Used to decide which notify_box subscribers belong to which box for a season yea
 """
 from __future__ import annotations
 
+import re
+from datetime import date
+
 # Default season (e.g. 2025): full roster per box tab.
 BOX_PLAYERS: dict[str, dict[str, str]] = {
     "Foo Fighters": {
@@ -94,6 +97,245 @@ BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
         },
     },
 }
+
+# Dates strings per week index (week 1 = first row). Mirrors static/app.js BOX_SCHEDULES `dates`.
+BOX_SCHEDULE_DATES: dict[str, list[str]] = {
+    "Foo Fighters": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Jan 11–17",
+    ],
+    "Pink Floyd": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Jan 11–17",
+        "Jan 25–31",
+        "Feb 15–21",
+    ],
+    "Dire Straits": [
+        "Nov 2–8",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 28–Jan 3",
+        "Jan 25–31",
+    ],
+    "Metallica": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Dec 28–Jan 3",
+        "Jan 4–10",
+        "Jan 11–17",
+        "Jan 25–31",
+        "Feb 1–7",
+    ],
+    "Nirvana": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Jan 11–17",
+        "Feb 1–7",
+    ],
+    "Fleetwood Mac": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Dec 28–Jan 3",
+        "Jan 4–10",
+        "Jan 11–17",
+        "Jan 18–24",
+        "Jan 25–31",
+        "Feb 1–7",
+        "Feb 8–14",
+        "Feb 15–21",
+    ],
+    "Guns N' Roses": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Jan 11–17",
+        "Jan 18–24",
+    ],
+    "Pearl Jam": [
+        "Nov 2–8",
+        "Nov 9–15",
+    ],
+    "Deep Purple": [
+        "Nov 2–8",
+        "Nov 9–15",
+        "Nov 16–29",
+        "Nov 30–Dec 6",
+        "Dec 7–13",
+        "Dec 14–27",
+        "Jan 18–24",
+    ],
+}
+
+# Same order as static/app.js FULL_BOX_MATCHUPS — extends short team tabs to week N.
+FULL_BOX_MATCHUP_DATES: list[str] = [
+    "Nov 2–8",
+    "Nov 9–15",
+    "Nov 16–29",
+    "Nov 30–Dec 6",
+    "Dec 7–13",
+    "Dec 14–27",
+    "Dec 28–Jan 3",
+    "Jan 4–10",
+    "Jan 11–17",
+    "Jan 18–24",
+    "Jan 25–31",
+    "Feb 1–7",
+    "Feb 8–14",
+    "Feb 15–21",
+    "Feb 22–28",
+]
+
+BOX_SCHEDULE_DATES_BY_YEAR: dict[int, dict[str, list[str]]] = {
+    2026: {
+        "Foo Fighters": [
+            "May 12, 2026",
+            "May 13, 2026",
+            "May 14, 2026",
+            "May 15, 2026",
+            "May 16, 2026",
+            "May 17, 2026",
+            "May 18, 2026",
+            "May 19, 2026",
+            "May 20, 2026",
+        ],
+    },
+}
+
+_MONTH_ABBR_BOX = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
+
+def _calendar_year_for_box_month(month: int, season_year: int) -> int:
+    """Fall-start league: Nov–Dec use season_year; Jan–Apr use season_year+1; May–Oct use season_year."""
+    if month >= 11:
+        return season_year
+    if month <= 4:
+        return season_year + 1
+    return season_year
+
+
+def parse_box_week_date_span(label: str, season_year: int) -> tuple[date, date] | None:
+    """Parse sheet label into inclusive calendar bounds (season_year = UI season start year)."""
+    label = label.strip()
+    if not label:
+        return None
+    single = re.match(r"^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s*$", label)
+    if single:
+        mon = _MONTH_ABBR_BOX[single.group(1).lower()[:3]]
+        day = int(single.group(2))
+        y = int(single.group(3))
+        try:
+            d = date(y, mon, day)
+        except ValueError:
+            return None
+        return d, d
+
+    parts = re.split(r"\s*[–\-]\s*", label, maxsplit=1)
+    if len(parts) != 2:
+        return None
+    left, right = parts[0].strip(), parts[1].strip()
+    lp = left.split()
+    if len(lp) < 2:
+        return None
+    try:
+        mon_l = _MONTH_ABBR_BOX[lp[0].lower()[:3]]
+        day_l = int(lp[1])
+    except (KeyError, ValueError):
+        return None
+    cy_l = _calendar_year_for_box_month(mon_l, season_year)
+    try:
+        start = date(cy_l, mon_l, day_l)
+    except ValueError:
+        return None
+
+    if re.fullmatch(r"\d{1,2}", right):
+        try:
+            day_r = int(right)
+            end = date(cy_l, mon_l, day_r)
+        except ValueError:
+            return None
+    else:
+        rp = right.split()
+        if len(rp) < 2:
+            return None
+        try:
+            mon_r = _MONTH_ABBR_BOX[rp[0].lower()[:3]]
+            day_r = int(rp[1])
+        except (KeyError, ValueError):
+            return None
+        cy_r = _calendar_year_for_box_month(mon_r, season_year)
+        try:
+            end = date(cy_r, mon_r, day_r)
+        except ValueError:
+            return None
+
+    if end < start:
+        return None
+    return start, end
+
+
+def get_box_week_dates_label(team: str, week: int, season_year: int) -> str | None:
+    """Schedule dates cell for this box/week/season (mirrors merged static sheet logic)."""
+    if week < 1:
+        return None
+    y = int(season_year)
+    ys = BOX_SCHEDULE_DATES_BY_YEAR.get(y, {}).get(team)
+    if ys:
+        return ys[week - 1] if week <= len(ys) else None
+    if y in BOX_PLAYERS_BY_YEAR:
+        return None
+    legacy = BOX_SCHEDULE_DATES.get(team)
+    if legacy and week <= len(legacy):
+        return legacy[week - 1]
+    if week <= len(FULL_BOX_MATCHUP_DATES):
+        return FULL_BOX_MATCHUP_DATES[week - 1]
+    return None
+
+
+def box_week_calendar_contains_date(team: str, week: int, season_year: int, on_date: date) -> bool:
+    """True if on_date falls in this box week's schedule window (cron cadence, like handicap week ranges)."""
+    lab = get_box_week_dates_label(team, week, season_year)
+    if not lab:
+        return False
+    span = parse_box_week_date_span(lab, season_year)
+    if not span:
+        return False
+    lo, hi = span
+    return lo <= on_date <= hi
 
 
 def year_uses_explicit_box_list(year: int) -> bool:

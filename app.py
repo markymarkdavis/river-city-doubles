@@ -28,7 +28,7 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, Respo
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
-from box_rosters import get_box_roster_dict
+from box_rosters import box_week_calendar_contains_date, get_box_roster_dict
 from rcd_db import DB_PATH, get_db, use_turso
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -760,13 +760,19 @@ def normalized_names_on_box_for_year(conn, box_team: str, year: int) -> set[str]
     return norms
 
 
-def maybe_send_box_score_notifications(box_team: str, week: int, year: int) -> int:
+def maybe_send_box_score_notifications(
+    box_team: str, week: int, year: int, *, on_date: date | None = None
+) -> int:
     """
     After a box score is saved, email notify_box subscribers whose name is on that
     box roster for this season (sheet + any names on existing scores for the box).
     One email per subscriber per (box, week, year); requires notify_box = 1.
+    When on_date is set (cron sweep), only sends if that date falls in this box week's
+    schedule window — same cadence as handicap cron reminders.
     Returns number of emails successfully sent.
     """
+    if on_date is not None and not box_week_calendar_contains_date(box_team, week, year, on_date):
+        return 0
     init_db()
     if box_team not in BOX_TEAM_NAMES:
         return 0
@@ -824,11 +830,11 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int) -> i
     return sent_count
 
 
-def sweep_box_score_notifications_for_season_years() -> int:
+def sweep_box_score_notifications_for_season_years(on_date: date) -> int:
     """
-    Re-run box notifications for every distinct saved box score in configured season years.
-    Idempotent (box_score_notifications_sent); used by cron so box mail can send when the
-    handicap season is inactive or the POST hook missed / mail failed once.
+    Re-run box notifications for saved scores in configured season years whose schedule
+    week contains on_date (cron cadence aligned with handicap week windows).
+    Idempotent via box_score_notifications_sent; POST /api/scores still notifies immediately (no on_date gate).
     """
     allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
     init_db()
@@ -845,7 +851,7 @@ def sweep_box_score_notifications_for_season_years() -> int:
         if y_raw is not None and y not in allowed:
             continue
         try:
-            total += maybe_send_box_score_notifications(box_team, week, y)
+            total += maybe_send_box_score_notifications(box_team, week, y, on_date=on_date)
         except Exception as e:
             log.warning(
                 "Box notification sweep failed team=%s week=%s year=%s: %s",
@@ -1501,7 +1507,7 @@ def run_notification_checks_for_today(on_date: date | None = None):
         "skipped": None,
     }
     try:
-        stats["box_emails_sent"] = sweep_box_score_notifications_for_season_years()
+        stats["box_emails_sent"] = sweep_box_score_notifications_for_season_years(on_date)
     except Exception as e:
         stats["errors"] += 1
         log.warning("Box notification sweep failed: %s", e)
