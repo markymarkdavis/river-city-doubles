@@ -65,6 +65,102 @@ Free web services spin down after ~15 minutes of inactivity. The first request a
 
 Richmond doubles squash league: box league and handicap league (open & main).
 
+## Architecture & tools
+
+The site splits **static UI** (GitHub Pages) from the **Flask API and database** (Render). Optional services handle email, scheduled notification checks, and cloud database hosting.
+
+```mermaid
+flowchart TB
+  subgraph users [Users]
+    Browser[Browser / installed PWA]
+  end
+
+  subgraph frontend [Frontend hosting]
+    GHPages[GitHub Pages]
+    Static["static/ HTML, CSS, JS"]
+    GHPages --> Static
+  end
+
+  subgraph ci [GitHub Actions]
+    PagesWF[Deploy to GitHub Pages]
+    CronWF[Daily notification cron]
+    PagesWF --> GHPages
+    CronWF -->|POST /api/cron/notifications| Render
+  end
+
+  subgraph backend [Backend hosting]
+    Render[Render web service]
+    Gunicorn[Gunicorn WSGI]
+    Flask[Flask app.py]
+    Render --> Gunicorn --> Flask
+  end
+
+  subgraph data [Data]
+    Turso[(Turso / libSQL)]
+    SQLite[(SQLite file scores.db)]
+    Flask -->|TURSO_* set| Turso
+    Flask -->|RCD_DB only| SQLite
+    Disk[Render persistent disk]
+    Disk -.-> SQLite
+  end
+
+  subgraph email [Outbound email]
+    Resend[Resend API]
+    SMTP[Brevo / SendGrid SMTP]
+    Flask -->|RCD_RESEND_API_KEY| Resend
+    Flask -->|RCD_SMTP_*| SMTP
+    Resend --> Inbox[Subscriber inboxes]
+    SMTP --> Inbox
+  end
+
+  subgraph dev [Local / ops scripts]
+    Seeds[seed_*.py backfill]
+    Pull[pull_from_hosted.py]
+    Push[push_to_hosted.py]
+    SyncTurso[sync_local_schedule_scores_to_turso.py]
+    Seeds --> SQLite
+    Seeds --> Turso
+    Pull -->|GET /api/*| Flask
+    Push -->|POST /api/scores| Flask
+    SyncTurso --> Turso
+  end
+
+  Browser -->|loads UI| GHPages
+  Browser -->|fetch /api/*| Flask
+  Static -->|RCD_API_BASE in config.js| Flask
+```
+
+### Tool breakdown
+
+| Tool | Role in this project |
+| ---- | -------------------- |
+| **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
+| **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **13:30 UTC** (~8:30 AM US Eastern in standard time), `POST`s the hosted `/api/cron/notifications` using secrets `NOTIFICATIONS_CRON_URL` and `NOTIFICATIONS_CRON_SECRET` (must match `RCD_CRON_SECRET` on Render). |
+| **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
+| **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
+| **Render** | Hosts the Flask app (`render.yaml`: **Gunicorn**, health check `/health`, optional **persistent disk** at `/var/data` with `RCD_DB=/var/data/scores.db`). |
+| **Gunicorn** | Production WSGI server on Render (`gunicorn --bind 0.0.0.0:$PORT app:app`). |
+| **Flask (`app.py`)** | REST API (`/api/scores`, `/api/schedule`, `/api/standings`, subscriptions, cron); serves the same static files when run locally; handicap/box notification logic. |
+| **Flask-CORS** | Allows the GitHub Pages origin to call the Render API when `RCD_CORS_ORIGINS` is set. |
+| **SQLite (`scores.db`)** | Default local database path (`RCD_DB`); file on disk on Render when using a persistent disk. |
+| **Turso (libSQL)** | Optional cloud database when `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` are set; same schema as SQLite, survives Render deploys without a disk. Accessed via Python **`libsql`** in `rcd_db.py`. |
+| **`rcd_db.py`** | Chooses Turso or local SQLite for all app and seed-script database access. |
+| **Resend** | Optional transactional email over HTTPS (`RCD_RESEND_API_KEY`); used instead of SMTP when set. |
+| **Brevo / SendGrid (SMTP)** | Alternative email path (`RCD_SMTP_HOST`, `RCD_SMTP_PASS`, etc.); production often uses Brevo relay. |
+| **python-dotenv** | Loads `.env` locally for secrets (see `.env.example`); not used on Render (env vars in dashboard). |
+| **Browser PWA** | `manifest.webmanifest` + `sw.js` for installable UI; `app.js` talks to the API and manages schedules, standings, players, and notification signup. |
+| **`box_rosters.py`** | Server-side box player lists (aligned with `static/app.js`) for box-league notification matching. |
+| **Seed / maintenance scripts** | `seed_schedule.py`, `seed_main_schedule.py`, `seed_recovered_2025.py`, `backfill_standings_from_schedule.py` populate schedule/scores; `pull_from_hosted.py` / `push_to_hosted.py` sync via HTTP API; `scripts/sync_local_schedule_scores_to_turso.py` copies local `schedule`+`scores` to Turso; `scripts/fix_player_name_spellings.py` and `scripts/send_example_email.py` for one-off fixes and tests. |
+| **UptimeRobot (optional)** | External ping to `/health` every few minutes to reduce Render free-tier cold starts (see **Render free tier** below). |
+
+### Typical request flows
+
+1. **View standings (hosted UI)** — Browser loads Pages → `app.js` calls `GET https://river-city-doubles.onrender.com/api/standings/handicap/open` → Flask reads Turso or SQLite → JSON back to the UI.
+2. **Submit a score** — `POST /api/scores` → row stored → for handicap, may trigger match-reminder and week-complete standings emails to subscribed players in that division.
+3. **Daily notifications** — GitHub Actions cron → `POST /api/cron/notifications` with cron secret → Flask re-runs notification checks for all weeks/levels/years.
+4. **Local dev** — `python app.py` serves UI + API on port 5000 with local `scores.db`; optional `.env` for Turso or SMTP testing.
+
 ## Run the app
 
 **Backend (Python/Flask):**
