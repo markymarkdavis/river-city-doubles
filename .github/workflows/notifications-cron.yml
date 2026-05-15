@@ -1,11 +1,18 @@
 # Daily ping to POST /api/cron/notifications (see app.py).
 # Server only sends mail for today's handicap season year and relevant week(s).
 #
+# Scheduled runs only work when:
+#   • This file is on the repo default branch (main)
+#   • Actions are enabled (Settings → Actions → General)
+#   • The workflow is not disabled (Actions → Daily notification cron → ⋯ → Enable)
+# Manual runs (workflow_dispatch) do not prove the schedule is enabled — check the runs list
+# for events labeled "schedule", not only "workflow_dispatch".
+#
 # Schedule: GitHub Actions cron is UTC-only. This runs at 14:40 UTC, which is:
 #   • 9:40 AM US Eastern Standard Time (roughly Nov–Mar)
 #   • 10:40 AM US Eastern Daylight Time (roughly Mar–Nov)
 # To target 9:40 AM Eastern during daylight saving instead, use: '40 13 * * *'
-# (that is 8:18 AM during standard time). Pick the line that fits your season.
+# (that is 8:40 AM during standard time). Pick the line that fits your season.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   NOTIFICATIONS_CRON_URL   — full URL, e.g. https://YOUR-APP.onrender.com/api/cron/notifications
@@ -20,6 +27,13 @@ on:
     # 14:40 UTC — see timezone note at top of file
     - cron: "40 14 * * *"
   workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notifications-cron
+  cancel-in-progress: false
 
 jobs:
   notify:

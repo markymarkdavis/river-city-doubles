@@ -351,6 +351,11 @@ def handicap_week_for_date(on_date: date, season_year: int) -> int | None:
     return None
 
 
+def handicap_week_contains_date(week: int, season_year: int, on_date: date) -> bool:
+    start, end = handicap_week_date_bounds(week, season_year)
+    return start <= on_date <= end
+
+
 def notification_weeks_for_date(on_date: date, season_year: int) -> dict:
     """
     Weeks to evaluate on a daily cron for on_date.
@@ -815,14 +820,30 @@ def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
             log.warning("Box score notification failed for %s: %s", s["email"], err)
 
 
-def maybe_send_match_play_notifications(level, week, year):
+def maybe_send_match_play_notifications(
+    level,
+    week,
+    year,
+    *,
+    on_date: date | None = None,
+    only_match: tuple[str, str] | None = None,
+):
     """
-    Notify subscribed players when they are scheduled to play in this week and that
-    specific match row still has no score (upcoming/in-progress reminder).
+    Notify subscribed players about unscored matches in this handicap week.
 
-    Only subscribers whose saved name appears on the handicap schedule for this
-    division (open or main) and season receive mail for that division's matches.
+    on_date: only send when this calendar day falls in the week's date range (cron uses today).
+    only_match: if set, only evaluate that team pairing (not used by daily cron).
     """
+    on_date = on_date or notification_today()
+    if not handicap_week_contains_date(week, year, on_date):
+        log.info(
+            "Match notifications skipped (level=%s week=%s year=%s): %s not in week range",
+            level,
+            week,
+            year,
+            on_date,
+        )
+        return 0
     init_db()
     with get_db() as conn:
         rows = conn.execute(
@@ -846,6 +867,11 @@ def maybe_send_match_play_notifications(level, week, year):
         ).fetchall()
         sent_keys = {(r["email"], r["team1"], r["team2"]) for r in sent_rows}
         player_levels = normalized_player_handicap_levels_for_year(conn, year)
+
+    if only_match:
+        a, b = (only_match[0] or "").strip(), (only_match[1] or "").strip()
+        pair = tuple(sorted([a, b]))
+        rows = [r for r in rows if tuple(sorted([(r["team1"] or "").strip(), (r["team2"] or "").strip()])) == pair]
 
     if not rows or not subs:
         log.info(
@@ -1453,7 +1479,9 @@ def run_notification_checks_for_today(on_date: date | None = None):
     standings_weeks = ctx.get("standings_weeks") or []
     for level in ("open", "main"):
         try:
-            stats["match_emails_sent"] += maybe_send_match_play_notifications(level, match_week, year) or 0
+            stats["match_emails_sent"] += (
+                maybe_send_match_play_notifications(level, match_week, year, on_date=on_date) or 0
+            )
         except Exception as e:
             stats["errors"] += 1
             log.warning(
@@ -1673,7 +1701,7 @@ def post_score():
             conn.commit()
     try:
         if league == "handicap":
-            maybe_send_match_play_notifications(level, week, year)
+            # Standings only on score submit; match reminders are sent by the daily cron.
             maybe_send_round_standings_notifications(level, week, year)
         elif league == "box":
             maybe_send_box_score_notifications(level, week, year)
@@ -1793,11 +1821,7 @@ def post_schedule():
             ),
         )
         conn.commit()
-    try:
-        year = int((data.get("year") or DEFAULT_SEASON_YEAR))
-        maybe_send_match_play_notifications(level, week, year)
-    except Exception as e:
-        log.warning("Schedule notification hook failed: %s", e)
+    # Match reminders are sent by the daily cron, not when schedule rows are posted.
     return jsonify({"ok": True}), 201
 
 

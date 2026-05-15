@@ -69,7 +69,9 @@ Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/te
 
 **Where to verify senders in Brevo (not under Transactional):** open [Senders list](https://app.brevo.com/senders/list) or **your account menu (top right) → Settings → Senders, domains & IPs → Senders**. Click **Add a sender**, enter the same email you use for `RCD_EMAIL_FROM`, and complete the verification code Brevo emails to that address. Better long-term: **Domains** tab → authenticate your domain (DKIM), then any `@yourdomain.com` sender is allowed.
 
-**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The daily job only evaluates the **current handicap season year** and **week(s) for today** (US Eastern by default): match reminders for this week; standings for this week when complete, and for the prior week only on the day after that week ends. Match/standings also run when someone submits a handicap score for that week.
+**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The daily job only evaluates the **current handicap season year** and **week(s) for today** (US Eastern by default): **match reminders** for unscored matches in this week (only when today’s date is inside that week’s range); **standings** for this week when complete, and for the prior week only on the day after that week ends. Submitting a handicap score triggers **standings** emails only (not match reminders).
+
+**GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` at 9:40 AM Eastern with `X-RCD-Cron`.
 
 **Render free tier: site “hangs” or times out**  
 Free web services spin down after ~15 minutes of inactivity. The first request after that triggers a **cold start** (often 30–90 seconds), so the site can look like it’s hanging. Options:
@@ -173,7 +175,7 @@ flowchart TB
 ### Typical request flows
 
 1. **View standings (hosted UI)** — Browser loads Pages → `app.js` calls `GET https://river-city-doubles.onrender.com/api/standings/handicap/open` → Flask reads Turso or SQLite → JSON back to the UI.
-2. **Submit a score** — `POST /api/scores` → row stored → for handicap, may trigger match-reminder and week-complete standings emails to subscribed players in that division.
+2. **Submit a score** — `POST /api/scores` → row stored → for handicap, may trigger week-complete **standings** emails (not match reminders; those are daily cron only).
 3. **Daily notifications** — GitHub Actions cron → `POST /api/cron/notifications` with cron secret → Flask checks only today’s season year and relevant week(s) (Open + Main).
 4. **Local dev** — `python app.py` serves UI + API on port 5000 with local `scores.db`; optional `.env` for Turso or SMTP testing.
 
