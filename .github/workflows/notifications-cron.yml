@@ -1,10 +1,10 @@
 # Daily ping to POST /api/cron/notifications (see app.py).
 #
-# Schedule: GitHub Actions cron is UTC-only. This runs at 13:00 UTC, which is:
-#   • 8:00 AM US Eastern Standard Time (roughly Nov–Mar)
-#   • 9:00 AM US Eastern Daylight Time (roughly Mar–Nov)
-# To target 8:00 AM Eastern during daylight saving instead, use: '0 12 * * *'
-# (that is 7:00 AM during standard time). Pick the line that fits your season.
+# Schedule: GitHub Actions cron is UTC-only. This runs at 13:30 UTC, which is:
+#   • 8:30 AM US Eastern Standard Time (roughly Nov–Mar)
+#   • 9:30 AM US Eastern Daylight Time (roughly Mar–Nov)
+# To target 8:30 AM Eastern during daylight saving instead, use: '30 12 * * *'
+# (that is 7:30 AM during standard time). Pick the line that fits your season.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   NOTIFICATIONS_CRON_URL   — full URL, e.g. https://YOUR-APP.onrender.com/api/cron/notifications
@@ -16,8 +16,8 @@ name: Daily notification cron
 
 on:
   schedule:
-    # 13:00 UTC — see timezone note at top of file
-    - cron: "0 13 * * *"
+    # 13:30 UTC — see timezone note at top of file
+    - cron: "30 13 * * *"
   workflow_dispatch: {}
 
 jobs:

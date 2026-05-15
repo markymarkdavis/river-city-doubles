@@ -423,6 +423,40 @@ def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool
     )
 
 
+def send_example_notification_email(to_email: str, to_name: str = "there"):
+    """Send a sample message showing handicap + box notification styles (for testing)."""
+    name = (to_name or "there").strip() or "there"
+    subject = "River City Doubles: Example notification email"
+    body = (
+        "This is an example of the kinds of emails you may receive after signing up on the site.\n\n"
+        "—— Handicap league (when you opt in) ——\n"
+        "Match reminder example:\n"
+        "  You are listed in an upcoming Open handicap match.\n"
+        "  Week 3 (Feb 1–Feb 7), season 2025-2026\n"
+        "  Fatty and Friends vs Team Nitro\n\n"
+        "Standings example (after all matches in a week are scored for your division):\n"
+        "  Week 3 is complete for Open handicap (2025-2026).\n"
+        "  Current standings: team list and points for Open only.\n\n"
+        "—— Box league (only if you check Box league on the form) ——\n"
+        "  A score was submitted for your box (e.g. Pink Floyd), week 4.\n"
+        "  We only send these if your first and last name matches that box roster.\n\n"
+        "Use the same first and last name spelling as on the schedule or box sheet when you subscribe.\n"
+    )
+    return send_match_notification_email(to_email, name, subject, body)
+
+
+def _notification_admin_secret_ok(supplied: str) -> bool:
+    """Accept cron or test secret for admin-only notification endpoints."""
+    supplied = (supplied or "").strip()
+    if not supplied:
+        return False
+    for key in ("RCD_CRON_SECRET", "RCD_NOTIFICATION_TEST_SECRET"):
+        expected = os.environ.get(key, "").strip()
+        if expected and supplied == expected:
+            return True
+    return False
+
+
 def compute_standings_rows(level, year):
     allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
     teams = {name: {"points": 0, "matches": 0, "wins": 0, "gamesWon": 0} for name in allowed}
@@ -1076,27 +1110,61 @@ def notification_email_status():
 @app.route("/api/notifications/test-email", methods=["POST"])
 def notification_test_email():
     """
-    Send a single test message if RCD_NOTIFICATION_TEST_SECRET is set on the server.
-    Uses the same transport as live mail (RCD_RESEND_API_KEY or SMTP + RCD_EMAIL_FROM).
-    Body: {"secret": "<same as env>", "to": "you@example.com"}
+    Send a single test message if RCD_NOTIFICATION_TEST_SECRET or RCD_CRON_SECRET is set.
+    Body: {"secret": "<same as env>", "to": "you@example.com", "kind": "smtp"|"example"}
+    Header alternative: X-RCD-Cron: <RCD_CRON_SECRET>
     """
-    expected = os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()
-    if not expected:
-        return jsonify({"error": "Test endpoint disabled (set RCD_NOTIFICATION_TEST_SECRET)"}), 404
+    if not (
+        os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()
+        or os.environ.get("RCD_CRON_SECRET", "").strip()
+    ):
+        return jsonify({"error": "Test endpoint disabled (set RCD_NOTIFICATION_TEST_SECRET or RCD_CRON_SECRET)"}), 404
     data = request.get_json(silent=True) or {}
-    if (data.get("secret") or "").strip() != expected:
+    supplied = (data.get("secret") or "").strip() or (request.headers.get("X-RCD-Cron") or "").strip()
+    if not _notification_admin_secret_ok(supplied):
         return jsonify({"error": "Invalid secret"}), 401
     to = (data.get("to") or "").strip().lower()
     if not to or "@" not in to:
         return jsonify({"error": "Provide a valid to address"}), 400
-    ok, err = send_match_notification_email(
-        to,
-        "there",
-        "River City Doubles: SMTP test",
-        "If you received this, SMTP is working. You can remove RCD_NOTIFICATION_TEST_SECRET after testing.",
-    )
+    kind = (data.get("kind") or "smtp").strip().lower()
+    name = " ".join((data.get("name") or "there").strip().split()) or "there"
+    if kind == "example":
+        ok, err = send_example_notification_email(to, name)
+    else:
+        ok, err = send_match_notification_email(
+            to,
+            name,
+            "River City Doubles: SMTP test",
+            "If you received this, SMTP is working. You can remove RCD_NOTIFICATION_TEST_SECRET after testing.",
+        )
     if ok:
-        return jsonify({"ok": True}), 200
+        return jsonify({"ok": True, "kind": kind, "to": to}), 200
+    return jsonify({"ok": False, "error": err}), 500
+
+
+@app.route("/api/notifications/example-email", methods=["POST"])
+def notification_example_email():
+    """
+    Send the sample handicap/box notification email.
+    Auth: JSON {"secret": "..."} or header X-RCD-Cron (RCD_CRON_SECRET or RCD_NOTIFICATION_TEST_SECRET).
+    Body: {"to": "you@example.com", "name": "First Last"}
+    """
+    if not (
+        os.environ.get("RCD_NOTIFICATION_TEST_SECRET", "").strip()
+        or os.environ.get("RCD_CRON_SECRET", "").strip()
+    ):
+        return jsonify({"error": "Example email disabled (set RCD_CRON_SECRET or RCD_NOTIFICATION_TEST_SECRET)"}), 404
+    data = request.get_json(silent=True) or {}
+    supplied = (data.get("secret") or "").strip() or (request.headers.get("X-RCD-Cron") or "").strip()
+    if not _notification_admin_secret_ok(supplied):
+        return jsonify({"error": "Invalid secret"}), 401
+    to = (data.get("to") or "").strip().lower()
+    if not to or "@" not in to:
+        return jsonify({"error": "Provide a valid to address"}), 400
+    name = " ".join((data.get("name") or "there").strip().split()) or "there"
+    ok, err = send_example_notification_email(to, name)
+    if ok:
+        return jsonify({"ok": True, "to": to}), 200
     return jsonify({"ok": False, "error": err}), 500
 
 
