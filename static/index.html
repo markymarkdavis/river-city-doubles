@@ -33,9 +33,9 @@
     <ul class="mobile-menu-list">
       <li><button type="button" class="mobile-menu-item" data-tab="home">Home</button></li>
       <li>
-        <span class="mobile-menu-label">Schedule</span>
-        <ul class="mobile-menu-sublist" id="mobile-menu-schedule">
-          <li><button type="button" class="mobile-menu-item" data-tab="schedule" data-value="2025">2025-2026</button></li>
+        <span class="mobile-menu-label">Schedules</span>
+        <ul class="mobile-menu-sublist" id="mobile-menu-schedules">
+          <li><button type="button" class="mobile-menu-item" data-tab="schedules" data-value="2025">2025-2026</button></li>
         </ul>
       </li>
       <li>
@@ -48,6 +48,12 @@
         <span class="mobile-menu-label">Standings</span>
         <ul class="mobile-menu-sublist" id="mobile-menu-standings">
           <li><button type="button" class="mobile-menu-item" data-tab="standings" data-value="2025">2025-2026</button></li>
+        </ul>
+      </li>
+      <li>
+        <span class="mobile-menu-label">Players</span>
+        <ul class="mobile-menu-sublist" id="mobile-menu-players">
+          <li><button type="button" class="mobile-menu-item" data-tab="players" data-value="2025">2025-2026</button></li>
         </ul>
       </li>
       <li><button type="button" class="mobile-menu-item" data-tab="notifications">Email Notifications</button></li>
@@ -67,10 +73,10 @@
 
   <nav class="tabs" role="tablist">
     <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="home">Home</button>
-    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="schedule" id="tab-schedule-wrap">
-      <button type="button" class="tab tab-dropdown-trigger" id="nav-schedule-trigger" aria-label="Schedule" aria-haspopup="listbox" aria-expanded="false">Schedule ▾</button>
-      <div class="tab-dropdown-panel" id="nav-schedule-panel" role="listbox" hidden>
-        <button type="button" class="tab-dropdown-option" data-tab="schedule" data-value="2025-2026">2025-2026</button>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="schedules" id="tab-schedules-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-schedules-trigger" aria-label="Schedules" aria-haspopup="listbox" aria-expanded="false">Schedules ▾</button>
+      <div class="tab-dropdown-panel" id="nav-schedules-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="schedules" data-value="2025-2026">2025-2026</button>
       </div>
     </div>
     <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="input" id="tab-input-wrap">
@@ -83,6 +89,12 @@
       <button type="button" class="tab tab-dropdown-trigger" id="nav-standings-trigger" aria-label="Standings" aria-haspopup="listbox" aria-expanded="false">Standings ▾</button>
       <div class="tab-dropdown-panel" id="nav-standings-panel" role="listbox" hidden>
         <button type="button" class="tab-dropdown-option" data-tab="standings" data-value="2025-2026">2025-2026</button>
+      </div>
+    </div>
+    <div class="tab tab-dropdown-wrap" role="tab" aria-selected="false" data-tab="players" id="tab-players-wrap">
+      <button type="button" class="tab tab-dropdown-trigger" id="nav-players-trigger" aria-label="Players" aria-haspopup="listbox" aria-expanded="false">Players ▾</button>
+      <div class="tab-dropdown-panel" id="nav-players-panel" role="listbox" hidden>
+        <button type="button" class="tab-dropdown-option" data-tab="players" data-value="2025-2026">2025-2026</button>
       </div>
     </div>
     <button type="button" class="tab" role="tab" aria-selected="false" data-tab="notifications">Email Notifications</button>
@@ -112,77 +124,22 @@
           <li><strong>Handicap league</strong> — A mix of player levels; handicaps keep matches fair and fun for everyone.</li>
         </ul>
         <p>
-          Use <strong>Input Score</strong> to submit your match results and check <strong>Standings</strong> to see how your team is doing.
+          Use <strong>Schedules</strong> to view box and handicap schedules, <strong>Input Score</strong> to submit results, and <strong>Standings</strong> to see how teams are doing.
         </p>
       </div>
     </section>
 
-    <section id="panel-schedule" class="panel" role="tabpanel" aria-labelledby="tab-schedule" hidden>
+    <section id="panel-schedules" class="panel" role="tabpanel" aria-labelledby="tab-schedules" hidden>
       <div class="content-card content-card--schedule">
-        <h2>Schedule</h2>
-        <div class="schedule-tabs">
-          <button type="button" class="schedule-tab active" data-schedule-level="open">Open Handicap</button>
-          <button type="button" class="schedule-tab" data-schedule-level="main">Main Handicap</button>
-          <button type="button" class="schedule-tab" data-schedule-level="box">Box league</button>
+        <h2>Schedules</h2>
+        <div class="schedules-tabs" role="tablist" aria-label="Schedule type">
+          <button type="button" class="schedules-tab active" role="tab" aria-selected="true" data-schedules-branch="box">Box</button>
+          <button type="button" class="schedules-tab" role="tab" aria-selected="false" data-schedules-branch="handicap">Handicap</button>
         </div>
-        <div class="schedule-wrapper">
-          <div id="schedule-panel-open" class="schedule-panel active">
-            <div class="table-scroll">
-              <table class="schedule-table">
-                <thead>
-                  <tr>
-                    <th>Week</th>
-                    <th>Date Range</th>
-                    <th>Team 1</th>
-                    <th>Team 2</th>
-                    <th>Bye</th>
-                    <th>Team 1 Players</th>
-                    <th>Team 2 Players</th>
-                    <th>Handicap</th>
-                    <th>Score</th>
-                    <th>Winner</th>
-                  </tr>
-                </thead>
-                <tbody id="schedule-tbody-open"></tbody>
-              </table>
-            </div>
-            <p id="empty-schedule-open" class="empty-state" hidden>No schedule entries yet for Open.</p>
-          </div>
-          <div id="schedule-panel-main" class="schedule-panel" hidden>
-            <div class="table-scroll">
-              <table class="schedule-table">
-                <thead>
-                  <tr>
-                    <th>Week</th>
-                    <th>Date Range</th>
-                    <th>Team 1</th>
-                    <th>Team 2</th>
-                    <th>Bye</th>
-                    <th>Team 1 Players</th>
-                    <th>Team 2 Players</th>
-                    <th>Handicap</th>
-                    <th>Score</th>
-                    <th>Winner</th>
-                  </tr>
-                </thead>
-                <tbody id="schedule-tbody-main"></tbody>
-              </table>
-            </div>
-            <p id="empty-schedule-main" class="empty-state" hidden>No schedule entries yet for Main.</p>
-          </div>
-          <div id="schedule-panel-box" class="schedule-panel" hidden>
+        <div id="schedules-branch-box" class="schedules-branch active">
+          <div id="schedule-panel-box" class="schedule-panel schedule-panel--box active">
             <div class="box-league">
-              <div class="box-tabs" aria-label="Box league tabs">
-                <button type="button" class="box-tab active" data-box-team="Foo Fighters">Foo Fighters</button>
-                <button type="button" class="box-tab" data-box-team="Pink Floyd">Pink Floyd</button>
-                <button type="button" class="box-tab" data-box-team="Dire Straits">Dire Straits</button>
-                <button type="button" class="box-tab" data-box-team="Metallica">Metallica</button>
-                <button type="button" class="box-tab" data-box-team="Nirvana">Nirvana</button>
-                <button type="button" class="box-tab" data-box-team="Fleetwood Mac">Fleetwood Mac</button>
-                <button type="button" class="box-tab" data-box-team="Guns N' Roses">Guns N' Roses</button>
-                <button type="button" class="box-tab" data-box-team="Pearl Jam">Pearl Jam</button>
-                <button type="button" class="box-tab" data-box-team="Deep Purple">Deep Purple</button>
-              </div>
+              <div class="box-tabs" aria-label="Box league tabs"></div>
               <div class="table-scroll">
                 <table class="schedule-table">
                   <thead>
@@ -204,6 +161,58 @@
                   <tbody id="schedule-tbody-box"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+        <div id="schedules-branch-handicap" class="schedules-branch" hidden>
+          <div class="schedule-tabs">
+            <button type="button" class="schedule-tab active" data-schedule-level="open">Open Handicap</button>
+            <button type="button" class="schedule-tab" data-schedule-level="main">Main Handicap</button>
+          </div>
+          <div class="schedule-wrapper">
+            <div id="schedule-panel-open" class="schedule-panel active">
+              <div class="table-scroll">
+                <table class="schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Date Range</th>
+                      <th>Team 1</th>
+                      <th>Team 2</th>
+                      <th>Bye</th>
+                      <th>Team 1 Players</th>
+                      <th>Team 2 Players</th>
+                      <th>Handicap</th>
+                      <th>Score</th>
+                      <th>Winner</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schedule-tbody-open"></tbody>
+                </table>
+              </div>
+              <p id="empty-schedule-open" class="empty-state" hidden>No schedule entries yet for Open.</p>
+            </div>
+            <div id="schedule-panel-main" class="schedule-panel" hidden>
+              <div class="table-scroll">
+                <table class="schedule-table">
+                  <thead>
+                    <tr>
+                      <th>Week</th>
+                      <th>Date Range</th>
+                      <th>Team 1</th>
+                      <th>Team 2</th>
+                      <th>Bye</th>
+                      <th>Team 1 Players</th>
+                      <th>Team 2 Players</th>
+                      <th>Handicap</th>
+                      <th>Score</th>
+                      <th>Winner</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schedule-tbody-main"></tbody>
+                </table>
+              </div>
+              <p id="empty-schedule-main" class="empty-state" hidden>No schedule entries yet for Main.</p>
             </div>
           </div>
         </div>
@@ -323,7 +332,7 @@
                 <div class="notifications-check-body">
                   <label for="notify-handicap" class="notifications-check-title">Handicap league</label>
                   <p id="notify-handicap-desc" class="notifications-check-desc">
-                    Open and Main: reminders when you're on the schedule, plus standings after each completed week.
+                    Open or Main: reminders when your name is on the schedule for that week; week-complete standings only for the division where your name appears on the schedule (spell your name the same way it appears there).
                   </p>
                 </div>
               </div>
@@ -338,7 +347,7 @@
                 <div class="notifications-check-body">
                   <label for="notify-box" class="notifications-check-title">Box league</label>
                   <p id="notify-box-desc" class="notifications-check-desc">
-                    Box emails aren't sent yet; leave this on if you want them when we add them.
+                    When a score is posted for your box, we email you only if your saved name matches that box’s roster for the season (same spelling as the sheet). Handicap emails stay separate unless you also check Handicap league.
                   </p>
                 </div>
               </div>
@@ -362,13 +371,14 @@
         <div class="faq-content">
           <h3>How do I enter a score?</h3>
           <ol>
+            <li>Open <strong>Schedules</strong> → <strong>Handicap</strong> to see Open and Main schedules, or <strong>Box</strong> for box schedules.</li>
             <li>Open the <strong>Input Score</strong> tab and pick the correct <strong>season</strong> (year) from the menu next to the tab if you use more than one season.</li>
             <li>Choose <strong>League</strong>: <strong>Handicap</strong> or <strong>Box</strong>.</li>
             <li>
               <strong>Handicap:</strong> Select <strong>Level</strong> (Open or Main), then <strong>Week</strong>. Choose <strong>Team 1</strong> and <strong>Team 2</strong>, enter handicaps and player names if needed, then games won for each side (best of five). Submit.
             </li>
             <li>
-              <strong>Box:</strong> Under <strong>Box</strong>, pick your <strong>box</strong> (team name), then <strong>Week</strong>. Team sides and player names fill in from the schedule; adjust if needed, enter games won, and submit.
+              <strong>Box:</strong> Under <strong>Schedules</strong> → <strong>Box</strong>, pick your <strong>box</strong> (team name), then use <strong>Input Score</strong> for week and games. Team sides and player names fill in from the schedule; adjust if needed, enter games won, and submit.
             </li>
             <li>If something errors, check that teams, week, and games (0–3 each side, total at most 5) are valid.</li>
           </ol>
@@ -457,17 +467,7 @@
         </div>
         <div id="standings-box" class="standings-panel" hidden>
           <div class="box-league">
-            <div class="box-tabs standings-box-tabs" aria-label="Box league standings tabs">
-              <button type="button" class="box-tab active" data-standings-box="Foo Fighters">Foo Fighters</button>
-              <button type="button" class="box-tab" data-standings-box="Pink Floyd">Pink Floyd</button>
-              <button type="button" class="box-tab" data-standings-box="Dire Straits">Dire Straits</button>
-              <button type="button" class="box-tab" data-standings-box="Metallica">Metallica</button>
-              <button type="button" class="box-tab" data-standings-box="Nirvana">Nirvana</button>
-              <button type="button" class="box-tab" data-standings-box="Fleetwood Mac">Fleetwood Mac</button>
-              <button type="button" class="box-tab" data-standings-box="Guns N' Roses">Guns N' Roses</button>
-              <button type="button" class="box-tab" data-standings-box="Pearl Jam">Pearl Jam</button>
-              <button type="button" class="box-tab" data-standings-box="Deep Purple">Deep Purple</button>
-            </div>
+            <div class="box-tabs standings-box-tabs" aria-label="Box league standings tabs"></div>
             <table class="standings-table">
               <thead>
                 <tr>
@@ -483,6 +483,32 @@
       </div>
     </section>
 
+    <section id="panel-players" class="panel" role="tabpanel" aria-labelledby="tab-players" hidden>
+      <div class="content-card">
+        <h2>Players</h2>
+        <div class="players-toolbar">
+          <label for="year-players">Season</label>
+          <select id="year-players" aria-label="Season year for player directory"></select>
+        </div>
+        <p class="standings-intro">
+          Sorted by first name. Box lists each player’s box (team name). Handicap division and handicap team come from the schedule (e.g. Main and The Boast Beasts). If someone is not on a handicap team for this season, both handicap columns show N/A.
+        </p>
+        <div class="table-scroll">
+          <table class="standings-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Box</th>
+                <th>Handicap division</th>
+                <th>Handicap team</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-players"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <section id="panel-fame" class="panel" role="tabpanel" aria-labelledby="tab-fame" hidden>
       <div class="content-card content-card--fame">
         <h2>Handicap Winners 2026</h2>
@@ -491,10 +517,10 @@
           <h3>Main Division Winners and Runners Up</h3>
           <figure class="fame-figure">
             <img src="main_division_handicap_2026.jpeg" alt="Main Division Handicap 2026" class="fame-img" />
-            <figcaption class="fame-caption">From left to right: Heidi Stevenson, Bob Reynolds, Skye Philips, Nick Farrell</figcaption>
+            <figcaption class="fame-caption">From left to right: Heidi Stevenson, Bob Reynolds, Skylyr Phillips, Nick Farrell</figcaption>
           </figure>
           <div class="fame-teams">
-            <p><strong>Winners — The Boast Beasts:</strong> Deesh Bhattal, Nitin Sethi, Alan Burke, Skye Philips, and Nick Farrell</p>
+            <p><strong>Winners — The Boast Beasts:</strong> Deesh Bhattal, Nitin Sethi, Alan Burke, Skylyr Phillips, and Nick Farrell</p>
             <p><strong>Runners up — The Double Troubles:</strong> Heidi Stevenson, Peter Thacker, Tom Mitchell, and Bob Reynolds</p>
           </div>
         </section>

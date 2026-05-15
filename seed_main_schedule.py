@@ -15,19 +15,19 @@ LEAGUE = "handicap"
 
 # (week, date_range, team1, team2, bye, team1_players, team2_players, handicap, games1, games2)
 ROWS = [
-    (1, "Jan 18–Jan 24", "The Double Troubles", "The Boast Beasts", None, "Peter Thacker and Tom Mitchell", "Skye Phillips and Nick Farrell", "0-10", 3, 1),
+    (1, "Jan 18–Jan 24", "The Double Troubles", "The Boast Beasts", None, "Peter Thacker and Tom Mitchell", "Skylyr Phillips and Nick Farrell", "0-10", 3, 1),
     (1, "Jan 18–Jan 24", "Drop Shotz", "Tin and Tonic", None, None, None, None, None, None),
     (2, "Jan 25–Jan 31", "The Double Troubles", "Tin and Tonic", None, "Tom Mitchell and Bob Reynolds", "Moses Maxfield and Alan Stone", "0-3", 3, 1),
-    (2, "Jan 25–Jan 31", "Drop Shotz", "The Boast Beasts", None, "Mukul Paithane and Robert Gentil", "Skye Phillips and Deesh Bhattal", "0-5", 2, 3),
+    (2, "Jan 25–Jan 31", "Drop Shotz", "The Boast Beasts", None, "Mukul Paithane and Robert Gentil", "Skylyr Phillips and Deesh Bhattal", "0-5", 2, 3),
     (3, "Feb 1–Feb 7", "The Double Troubles", "Drop Shotz", None, "Peter Thacker and Heidi Stevenson", "Jack Hager and Mukul Paithane", "0-2", 0, 3),
-    (3, "Feb 1–Feb 7", "Tin and Tonic", "The Boast Beasts", None, "Matt Rho and Billy Miller", "Skye Phillips and Deesh Bhattal", "0-9", 3, 1),
+    (3, "Feb 1–Feb 7", "Tin and Tonic", "The Boast Beasts", None, "Matt Rho and Billy Miller", "Skylyr Phillips and Deesh Bhattal", "0-9", 3, 1),
     (4, "Feb 8–Feb 14", None, None, "BYE WEEK", None, None, None, None, None),
     (5, "Feb 15–Feb 21", "The Double Troubles", "The Boast Beasts", None, "Heidi Stevenson and Bob Reynolds", "Nick Farrell and Deesh Bhattal", "0-7", 0, 3),
     (5, "Feb 15–Feb 21", "Drop Shotz", "Tin and Tonic", None, "Jack Hager and Austin Brockenbough", "Trey Packard and Billy Miller", "7-0", 3, 2),
     (6, "Feb 22–Feb 28", "The Double Troubles", "Tin and Tonic", None, "Bob Reynolds and Peter Thacker", "Trey Packard and Billy Miller", "0-1", 3, 2),
-    (6, "Feb 22–Feb 28", "Drop Shotz", "The Boast Beasts", None, "Jack Hager and Robert Gentil", "Skye Phillips and Nick Farrell", "0-5", 1, 3),
+    (6, "Feb 22–Feb 28", "Drop Shotz", "The Boast Beasts", None, "Jack Hager and Robert Gentil", "Skylyr Phillips and Nick Farrell", "0-5", 1, 3),
     (7, "Mar 1–Mar 7", "The Double Troubles", "Drop Shotz", None, "Heidi Stevenson and Peter Thacker", "Mukul Paithane and Robert Gentil", "0-4", 3, 2),
-    (7, "Mar 1–Mar 7", "Tin and Tonic", "The Boast Beasts", None, "Billy Miller and Alan Stone", "Skye Phillips and Nick Farrell", "0-8", 3, 2),
+    (7, "Mar 1–Mar 7", "Tin and Tonic", "The Boast Beasts", None, "Billy Miller and Alan Stone", "Skylyr Phillips and Nick Farrell", "0-8", 3, 2),
 ]
 
 

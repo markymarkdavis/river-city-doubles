@@ -23,6 +23,7 @@ except ImportError:
 from flask import Flask, request, jsonify, send_from_directory, send_file, Response
 from flask_cors import CORS
 
+from box_rosters import get_box_roster_dict
 from rcd_db import DB_PATH, get_db, use_turso
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -86,9 +87,9 @@ TEAM_PLAYERS_OPEN = {
     "Even Older and Grumpier": ["Jim Davis", "Sanjay Hinduja", "John Street", "Spencer Williamson", "Jimmy Cooke", "Jim Bonbright"],
     "El Mustachios": ["Mark Davis", "John Street", "Jimmy Cooke", "Tommy Richards"],
     "Fatty and Friends": ["Scott Harrison", "Ned Sinnott", "Grant Stevens", "Matt Chriss"],
-    "Mack Attack": ["Andy Mack", "Michael Halloran", "Dave Shepardson", "Jon Rasich"],
+    "Mack Attack": ["Andy Mack", "Michael Halloran", "David Shepardson", "Jon Rasich"],
     "All the right Angles": ["Robert Angle", "George Stephenson", "Charles Kempe", "Jimmy Meadows"],
-    "Team Nitro": ["Josh Wishnack", "Manoli Loupassi", "Berkeley Edmunds", "Frank Devenoge", "Dean King"],
+    "Team Nitro": ["Josh Wishnack", "Manoli Loupassi", "Berkeley Edmunds", "Frank De Venoge", "Dean King"],
 }
 
 # Main division: no roster provided, so all players available (we could add TEAM_PLAYERS_MAIN later)
@@ -110,7 +111,7 @@ PLAYERS = [
     "Teddy Damgard",
     "Jim Bonbright",
     "Tommy Richards",
-    "Frank Devenoge",
+    "Frank De Venoge",
     "Dean King",
     "Scott Harrison",
     "Andy Mack",
@@ -119,7 +120,7 @@ PLAYERS = [
     "Michael Halloran",
     "George Stephenson",
     "Grant Stevens",
-    "Dave Shepardson",
+    "David Shepardson",
     "Charles Kempe",
     "Matt Chriss",
     "Jon Rasich",
@@ -239,6 +240,17 @@ def init_db():
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS round_standings_notifications_sent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                level TEXT NOT NULL,
+                week INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                sent_at TEXT NOT NULL,
+                UNIQUE(email, level, week, year)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS box_score_notifications_sent (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL,
                 level TEXT NOT NULL,
@@ -392,7 +404,10 @@ def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool
             "and standings after each week once all matches that week have scores."
         )
     if notify_box:
-        topics.append("Box league — we'll email you when box notifications are available.")
+        topics.append(
+            "Box league — when you opt in, we email you only about scores submitted for your box "
+            "(your name must match the roster for that box and season)."
+        )
     lines = "\n".join(f"• {t}" for t in topics)
     body = (
         "You're signed up for River City Doubles email updates.\n\n"
@@ -434,10 +449,134 @@ def compute_standings_rows(level, year):
     return standings
 
 
+def handicap_schedule_player_norms_for_level(conn, level: str, year: int) -> set:
+    """Normalized player names on the handicap schedule for this division and season (all weeks)."""
+    norms = set()
+    rows = conn.execute(
+        """SELECT team1_players, team2_players FROM schedule
+           WHERE level = ? AND (year = ? OR year IS NULL)""",
+        (level, year),
+    ).fetchall()
+    for r in rows:
+        for p in split_player_names(r["team1_players"]) + split_player_names(r["team2_players"]):
+            norms.add(normalize_name(p))
+    return norms
+
+
+def normalized_player_handicap_levels_for_year(conn, year: int) -> dict[str, set[str]]:
+    """
+    Map normalized player name -> {'open', 'main'} for handicap schedule rows in that season.
+    Used so match/standings emails only go to subscribers in the relevant division.
+    """
+    rows = conn.execute(
+        """SELECT level, team1_players, team2_players FROM schedule
+           WHERE level IN ('open', 'main') AND (year = ? OR year IS NULL)""",
+        (year,),
+    ).fetchall()
+    out: dict[str, set[str]] = {}
+    for r in rows:
+        lev = (r["level"] or "").strip().lower()
+        if lev not in ("open", "main"):
+            continue
+        for p in split_player_names(r["team1_players"]) + split_player_names(r["team2_players"]):
+            k = normalize_name(p)
+            if not k:
+                continue
+            out.setdefault(k, set()).add(lev)
+    return out
+
+
+def normalized_names_on_box_for_year(conn, box_team: str, year: int) -> set[str]:
+    """
+    Normalized names for anyone on this box tab roster for the season, plus any names
+    already present on saved box scores for this team/year (sub names must match).
+    """
+    norms: set[str] = set()
+    roster = get_box_roster_dict(box_team, year)
+    for v in roster.values():
+        k = normalize_name(str(v))
+        if k:
+            norms.add(k)
+    rows = conn.execute(
+        """SELECT team1_players, team2_players FROM scores
+           WHERE league = 'box' AND level = ? AND (year = ? OR year IS NULL)""",
+        (box_team, year),
+    ).fetchall()
+    for r in rows:
+        for p in split_player_names(r["team1_players"]) + split_player_names(r["team2_players"]):
+            k = normalize_name(p)
+            if k:
+                norms.add(k)
+    return norms
+
+
+def maybe_send_box_score_notifications(box_team: str, week: int, year: int):
+    """
+    After a box score is saved, email notify_box subscribers whose name is on that
+    box roster for this season (sheet + any names on existing scores for the box).
+    One email per subscriber per (box, week, year); requires notify_box = 1.
+    """
+    init_db()
+    if box_team not in BOX_TEAM_NAMES:
+        return
+    with get_db() as conn:
+        subs = conn.execute(
+            """SELECT name, email FROM email_subscriptions
+               WHERE is_active = 1 AND notify_box = 1""",
+        ).fetchall()
+        roster_norms = normalized_names_on_box_for_year(conn, box_team, year)
+        sent_rows = conn.execute(
+            """SELECT email FROM box_score_notifications_sent
+               WHERE level = ? AND week = ? AND year = ?""",
+            (box_team, week, year),
+        ).fetchall()
+        sent_emails = {r["email"] for r in sent_rows}
+
+    if not subs:
+        return
+    if not roster_norms:
+        log.info(
+            "Box score notifications skipped (team=%s week=%s year=%s): no roster or player names on scores for this box",
+            box_team,
+            week,
+            year,
+        )
+        return
+
+    subject = f"River City Doubles: {box_team} — week {week} score update"
+    for s in subs:
+        nn = normalize_name(s["name"])
+        if nn not in roster_norms:
+            continue
+        if s["email"] in sent_emails:
+            continue
+        body = (
+            f"A score was submitted for your box \"{box_team}\" "
+            f"(season year {year}), week {week}.\n"
+            "Check the site for schedules and standings.\n"
+        )
+        ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
+        if ok:
+            with get_db() as conn:
+                conn.execute(
+                    """INSERT OR IGNORE INTO box_score_notifications_sent
+                       (email, level, week, year, sent_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (s["email"], box_team, week, year, now_iso()),
+                )
+                conn.commit()
+            sent_emails.add(s["email"])
+        else:
+            log.warning("Box score notification failed for %s: %s", s["email"], err)
+
+
 def maybe_send_match_play_notifications(level, week, year):
     """
     Notify subscribed players when they are scheduled to play in this week and that
     specific match row still has no score (upcoming/in-progress reminder).
+
+    Only subscribers whose saved name appears on the handicap schedule for this
+    division (open or main) and season receive mail for that division's matches.
     """
     init_db()
     with get_db() as conn:
@@ -458,6 +597,7 @@ def maybe_send_match_play_notifications(level, week, year):
             (level, week, year),
         ).fetchall()
         sent_keys = {(r["email"], r["team1"], r["team2"]) for r in sent_rows}
+        player_levels = normalized_player_handicap_levels_for_year(conn, year)
 
     if not rows or not subs:
         log.info(
@@ -481,6 +621,9 @@ def maybe_send_match_play_notifications(level, week, year):
         for n_norm in players_norm:
             s = sub_by_name.get(n_norm)
             if not s:
+                continue
+            divs = player_levels.get(n_norm)
+            if not divs or level not in divs:
                 continue
             key = (s["email"], row["team1"] or "", row["team2"] or "")
             if key in sent_keys:
@@ -532,6 +675,9 @@ def maybe_send_match_play_notifications(level, week, year):
 def maybe_send_round_standings_notifications(level, week, year):
     """
     Send standings digest when all non-bye matches in a week have scores.
+
+    Only subscribers whose saved name appears on the handicap schedule for this
+    division (Open or Main) and season receive mail for that division's standings.
     """
     init_db()
     with get_db() as conn:
@@ -569,6 +715,8 @@ def maybe_send_round_standings_notifications(level, week, year):
             (level, week, year),
         ).fetchall()
         sent_emails = {r["email"] for r in sent}
+        player_norms = handicap_schedule_player_norms_for_level(conn, level, year)
+        player_levels = normalized_player_handicap_levels_for_year(conn, year)
 
     if not subs:
         log.info(
@@ -629,6 +777,27 @@ def maybe_send_round_standings_notifications(level, week, year):
 </html>
 """
     pending = [s for s in subs if s["email"] not in sent_emails]
+    if not player_norms:
+        log.info(
+            "Standings email skipped (level=%s week=%s year=%s): no player names on schedule for this division; add team1_players/team2_players to match subscribers",
+            level,
+            week,
+            year,
+        )
+        return
+    before_filter = len(pending)
+    pending = [
+        s
+        for s in pending
+        if level in player_levels.get(normalize_name(s["name"]), set())
+    ]
+    if before_filter and not pending:
+        log.info(
+            "Standings email skipped (level=%s week=%s): no subscriber names matched schedule players for this division",
+            level,
+            week,
+        )
+        return
     if not pending:
         return
     for s in pending:
@@ -1145,6 +1314,8 @@ def post_score():
         if league == "handicap":
             maybe_send_match_play_notifications(level, week, year)
             maybe_send_round_standings_notifications(level, week, year)
+        elif league == "box":
+            maybe_send_box_score_notifications(level, week, year)
     except Exception as e:
         log.warning("Notification hook after score failed: %s", e)
     return jsonify({"ok": True}), 201

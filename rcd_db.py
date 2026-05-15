@@ -62,6 +62,10 @@ class TursoCursorShim:
         self._inner = inner
         self.description = inner.description
 
+    @property
+    def rowcount(self):
+        return getattr(self._inner, "rowcount", -1)
+
     def fetchone(self):
         row = self._inner.fetchone()
         if row is None:

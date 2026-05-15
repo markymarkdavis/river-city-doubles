@@ -142,8 +142,8 @@
     },
     "Guns N' Roses": {
       A: "Jimmy Cooke",
-      B: "Frank Devenoge",
-      C: "Dave Shepardson",
+      B: "Frank De Venoge",
+      C: "David Shepardson",
       D: "Dean King",
       E: "Matt Chriss",
       F: "Berkeley Edmunds",
@@ -342,21 +342,87 @@
     ],
   };
 
+  /** When a year is listed here, only boxes with both roster + schedule rows appear for that season. */
+  const BOX_PLAYERS_BY_YEAR = {
+    2026: BOX_PLAYERS_2026,
+  };
+
+  const BOX_SCHEDULES_BY_YEAR = {
+    2026: BOX_SCHEDULES_2026,
+  };
+
   function seasonBoxYear(year) {
     const y = Number(year);
     return Number.isNaN(y) ? 2025 : y;
   }
 
+  function yearUsesExplicitBoxList(y) {
+    const yNum = Number(y);
+    if (Number.isNaN(yNum)) return false;
+    return (
+      Object.prototype.hasOwnProperty.call(BOX_PLAYERS_BY_YEAR, yNum) ||
+      Object.prototype.hasOwnProperty.call(BOX_SCHEDULES_BY_YEAR, yNum)
+    );
+  }
+
+  /** Box names shown for this season: all legacy boxes, or only teams configured for an explicit year. */
+  function getBoxTeamsForYear(year) {
+    const y = seasonBoxYear(year);
+    if (!yearUsesExplicitBoxList(y)) return BOX_TEAMS.slice();
+    const pm = BOX_PLAYERS_BY_YEAR[y];
+    const sm = BOX_SCHEDULES_BY_YEAR[y];
+    const names = new Set([...(pm ? Object.keys(pm) : []), ...(sm ? Object.keys(sm) : [])]);
+    return [...names]
+      .filter((team) => {
+        const p = pm && pm[team];
+        const s = sm && sm[team];
+        const hasPlayers = p && typeof p === "object" && Object.keys(p).length > 0;
+        const hasSchedule = Array.isArray(s) && s.length > 0;
+        return hasPlayers && hasSchedule;
+      })
+      .sort((a, b) => a.localeCompare(b));
+  }
+
+  function syncBoxTabButtonsForYear(year) {
+    const teams = getBoxTeamsForYear(year);
+    const schedTabs = document.querySelector("#schedule-panel-box .box-tabs");
+    const statTabs = document.querySelector("#standings-box .standings-box-tabs");
+    const prevSched = document.querySelector("#schedule-panel-box .box-tab.active")?.dataset?.boxTeam;
+    const prevStat = document.querySelector("#standings-box .standings-box-tabs .box-tab.active")?.dataset?.standingsBox;
+    const pick = (prev) => (prev && teams.includes(prev) ? prev : teams[0] || "");
+    const schedActive = pick(prevSched);
+    const statActive = pick(prevStat);
+    const appendTabs = (container, dataAttr, activeTeam) => {
+      if (!container) return;
+      container.innerHTML = "";
+      teams.forEach((team) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "box-tab" + (team === activeTeam ? " active" : "");
+        btn.dataset[dataAttr] = team;
+        btn.textContent = team;
+        container.appendChild(btn);
+      });
+    };
+    appendTabs(schedTabs, "boxTeam", schedActive);
+    appendTabs(statTabs, "standingsBox", statActive);
+  }
+
   function getBoxPlayersForYear(team, year) {
     const y = seasonBoxYear(year);
-    if (y === 2026 && BOX_PLAYERS_2026[team]) return BOX_PLAYERS_2026[team];
+    if (yearUsesExplicitBoxList(y)) {
+      const p = (BOX_PLAYERS_BY_YEAR[y] || {})[team];
+      return p && typeof p === "object" ? p : {};
+    }
     return BOX_PLAYERS[team] || {};
   }
 
   /** Built-in sheet rows (dates / demo scores) before merging API scores. */
   function getStaticBoxScheduleRowsForYear(team, year) {
     const y = seasonBoxYear(year);
-    if (y === 2026 && BOX_SCHEDULES_2026[team]) return BOX_SCHEDULES_2026[team];
+    if (yearUsesExplicitBoxList(y)) {
+      return (BOX_SCHEDULES_BY_YEAR[y] || {})[team] || [];
+    }
     return BOX_SCHEDULES[team] || [];
   }
 
@@ -504,7 +570,12 @@
     };
     if (league === "box") {
       add("", "Select box");
-      BOX_TEAMS.forEach((b) => add(b, b));
+      const boxTeams = getBoxTeamsForYear(getYearFrom("year-input"));
+      boxTeams.forEach((b) => add(b, b));
+      const cur = levelEl.value;
+      if (cur && !boxTeams.includes(cur)) {
+        levelEl.value = "";
+      }
     } else {
       add("", "Select level");
       add("open", "Open");
@@ -561,7 +632,7 @@
   }
 
   function fillBoxTeamDropdowns() {
-    fillTeamDropdownOptions(BOX_TEAMS);
+    fillTeamDropdownOptions(getBoxTeamsForYear(getYearFrom("year-input")));
   }
 
   function clearScoreFormPlayers() {
@@ -679,10 +750,10 @@
   }
 
   async function removeNotificationSubscription(email) {
-    const res = await fetchWithTimeout(apiUrl("/api/notifications/subscriptions"), {
+    // Use query string — many stacks drop or ignore JSON bodies on DELETE.
+    const q = encodeURIComponent(email);
+    const res = await fetchWithTimeout(`${apiUrl("/api/notifications/subscriptions")}?email=${q}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -743,10 +814,11 @@
     return Array.isArray(data) ? data : [];
   }
 
-  const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings"];
+  const YEAR_SELECT_IDS = ["year-schedule", "year-input", "year-standings", "year-players"];
   let rcdYearSelectListenersAttached = false;
 
   async function refreshUiForSeasonYear() {
+    syncBoxTabButtonsForYear(getYearFrom("year-schedule"));
     void renderScheduleTable("open");
     void renderScheduleTable("main");
     await renderBoxSchedule();
@@ -755,9 +827,11 @@
     await renderBoxStandings();
     const form = document.getElementById("score-form");
     if (form && form.league.value === "box") {
+      fillLevelOptionsForLeague("box");
       fillWeekOptions("box");
       autoPopulateBoxPlayersInForm();
     }
+    void renderPlayersTable();
   }
 
   function setYearForTab(tabId, value) {
@@ -795,8 +869,8 @@
       select.value = String(defaultYear);
     });
 
-    const panelIds = ["nav-schedule-panel", "nav-input-panel", "nav-standings-panel"];
-    const tabIds = ["schedule", "input", "standings"];
+    const panelIds = ["nav-schedules-panel", "nav-input-panel", "nav-standings-panel", "nav-players-panel"];
+    const tabIds = ["schedules", "input", "standings", "players"];
     panelIds.forEach((panelId, i) => {
       const panel = document.getElementById(panelId);
       const tabId = tabIds[i];
@@ -813,7 +887,7 @@
       });
     });
 
-    const mobileListIds = ["mobile-menu-schedule", "mobile-menu-input", "mobile-menu-standings"];
+    const mobileListIds = ["mobile-menu-schedules", "mobile-menu-input", "mobile-menu-standings", "mobile-menu-players"];
     mobileListIds.forEach((listId, i) => {
       const ul = document.getElementById(listId);
       const tabId = tabIds[i];
@@ -863,6 +937,7 @@
         sel.addEventListener("change", onSeasonYearChange);
       });
     }
+    void refreshUiForSeasonYear();
   }
 
   function switchTab(tabId) {
@@ -885,7 +960,12 @@
       panel.hidden = false;
     }
     if (tabId === "standings") void renderStandings();
-    if (tabId === "schedule") void renderSchedule();
+    if (tabId === "schedules") {
+      syncBoxTabButtonsForYear(getYearFrom("year-schedule"));
+      switchSchedulesBranch("box");
+      void renderSchedule();
+    }
+    if (tabId === "players") void renderPlayersTable();
     if (tabId === "rules") updateRulesContent();
     if (tabId === "notifications") refreshNotificationsServerHint();
   }
@@ -916,25 +996,48 @@
     return Array.isArray(data) ? data : [];
   }
 
+  function switchSchedulesBranch(branch) {
+    document.querySelectorAll(".schedules-tab").forEach((t) => {
+      const on = t.dataset.schedulesBranch === branch;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    const boxBranch = document.getElementById("schedules-branch-box");
+    const hcBranch = document.getElementById("schedules-branch-handicap");
+    if (!boxBranch || !hcBranch) return;
+    if (branch === "box") {
+      boxBranch.classList.add("active");
+      boxBranch.hidden = false;
+      hcBranch.classList.remove("active");
+      hcBranch.hidden = true;
+      void renderBoxSchedule();
+    } else {
+      hcBranch.classList.add("active");
+      hcBranch.hidden = false;
+      boxBranch.classList.remove("active");
+      boxBranch.hidden = true;
+      const activeSt = document.querySelector("#schedules-branch-handicap .schedule-tab.active");
+      const lvl = activeSt ? activeSt.dataset.scheduleLevel : "open";
+      switchScheduleTab(lvl);
+    }
+  }
+
   function switchScheduleTab(level) {
-    document.querySelectorAll(".schedule-tab").forEach((t) => {
+    document.querySelectorAll("#schedules-branch-handicap .schedule-tab").forEach((t) => {
       t.classList.toggle("active", t.dataset.scheduleLevel === level);
     });
-    document.querySelectorAll(".schedule-panel").forEach((p) => {
+    document.querySelectorAll("#schedules-branch-handicap .schedule-panel").forEach((p) => {
       const id = p.id.replace("schedule-panel-", "");
       p.classList.toggle("active", id === level);
       p.hidden = id !== level;
     });
-    if (level === "box") {
-      void renderBoxSchedule();
-    } else {
-      renderScheduleTable(level);
-    }
+    void renderScheduleTable(level);
   }
 
   async function renderScheduleTable(level) {
     const tbody = document.getElementById(`schedule-tbody-${level}`);
     const emptyEl = document.getElementById(`empty-schedule-${level}`);
+    if (!tbody || !emptyEl) return;
     tbody.innerHTML = "";
     try {
       const rows = await fetchSchedule(level);
@@ -974,9 +1077,19 @@
   async function renderBoxSchedule() {
     const tbody = document.getElementById("schedule-tbody-box");
     if (!tbody) return;
-    const activeTab = document.querySelector("#schedule-panel-box .box-tab.active");
-    const team = activeTab ? activeTab.dataset.boxTeam : "Foo Fighters";
     const year = getYearFrom("year-schedule");
+    const teamsList = getBoxTeamsForYear(year);
+    if (teamsList.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="12" class="empty-state">No box leagues configured for this season.</td></tr>';
+      document.querySelectorAll("#schedule-panel-box .box-player-header").forEach((th) => {
+        const letter = th.dataset.letter;
+        th.textContent = letter || "";
+      });
+      return;
+    }
+    const activeTab = document.querySelector("#schedule-panel-box .box-tab.active");
+    const team = (activeTab && activeTab.dataset.boxTeam) || teamsList[0];
     try {
       await refreshBoxScoresMergeCache(team, year);
     } catch (err) {
@@ -1081,9 +1194,15 @@
   async function renderBoxStandings() {
     const tbody = document.getElementById("tbody-standings-box");
     if (!tbody) return;
-    const activeTab = document.querySelector(".standings-box-tabs .box-tab.active");
-    const team = activeTab ? activeTab.dataset.standingsBox : "Foo Fighters";
     const year = getYearFrom("year-standings");
+    const teamsList = getBoxTeamsForYear(year);
+    if (teamsList.length === 0) {
+      tbody.innerHTML =
+        '<tr><td colspan="3" class="empty-state">No box leagues configured for this season.</td></tr>';
+      return;
+    }
+    const activeTab = document.querySelector("#standings-box .standings-box-tabs .box-tab.active");
+    const team = (activeTab && activeTab.dataset.standingsBox) || teamsList[0];
     try {
       await refreshBoxScoresMergeCache(team, year);
     } catch (err) {
@@ -1137,6 +1256,190 @@
     void renderStandingsTable("handicap-open");
     void renderStandingsTable("handicap-main");
     await renderBoxStandings();
+  }
+
+  function splitSchedulePlayerCell(value) {
+    if (!value || !String(value).trim()) return [];
+    const cleaned = String(value).replace(/\//g, ",").replace(/&/g, ",").replace(/\s+and\s+/gi, ",");
+    return cleaned
+      .split(",")
+      .map((p) => p.trim().replace(/\s+/g, " "))
+      .filter(Boolean);
+  }
+
+  function firstNameSortKey(displayName) {
+    const parts = String(displayName || "").trim().split(/\s+/);
+    return (parts[0] || "").toLowerCase();
+  }
+
+  /** Schedule/box strings may use old spellings; merge rows and show preferred names. */
+  const PLAYER_NAME_CANONICAL = new Map([
+    ["dave shepardson", "David Shepardson"],
+    ["frank devenoge", "Frank De Venoge"],
+    ["skye phillips", "Skylyr Phillips"],
+    ["skye philips", "Skylyr Phillips"],
+  ]);
+
+  function canonicalPlayerName(raw) {
+    const t = String(raw || "").trim().replace(/\s+/g, " ");
+    if (!t) return "";
+    const k = t.toLowerCase();
+    return PLAYER_NAME_CANONICAL.get(k) || t;
+  }
+
+  /**
+   * Handicap division + schedule team for the Players tab. For these names, schedule
+   * rows are ignored so each person shows exactly one division/team (keys: lowercase display name).
+   */
+  const PLAYER_HANDICAP_CANONICAL_ROSTER = new Map([
+    [
+      2025,
+      new Map([
+        ["alan burke", { division: "Main", team: "The Boast Beasts" }],
+        ["bt thornton", { division: "Main", team: "Drop Shotz" }],
+        ["grant stevens", { division: "Open", team: "Fatty and Friends" }],
+        ["michael halloran", { division: "Open", team: "Mack Attack" }],
+        ["teddy damgard", { division: "Open", team: "Team Nitro" }],
+        ["dean king", { division: "Open", team: "Team Nitro" }],
+        ["nitin sethi", { division: "Main", team: "The Boast Beasts" }],
+        ["spencer williamson", { division: "Open", team: "Even Older and Grumpier" }],
+      ]),
+    ],
+    [
+      2026,
+      new Map([
+        ["alan burke", { division: "Main", team: "The Boast Beasts" }],
+        ["bt thornton", { division: "Main", team: "Drop Shotz" }],
+        ["grant stevens", { division: "Open", team: "Fatty and Friends" }],
+        ["michael halloran", { division: "Open", team: "Mack Attack" }],
+        ["teddy damgard", { division: "Open", team: "Team Nitro" }],
+        ["dean king", { division: "Open", team: "Team Nitro" }],
+        ["nitin sethi", { division: "Main", team: "The Boast Beasts" }],
+        ["spencer williamson", { division: "Open", team: "Even Older and Grumpier" }],
+      ]),
+    ],
+  ]);
+
+  function sortedHandicapPairParts(hcPairs) {
+    if (!hcPairs || hcPairs.size === 0) return [];
+    const divRank = (d) => (d === "Open" ? 0 : d === "Main" ? 1 : 2);
+    const parsed = [...hcPairs].map((s) => {
+      const i = s.indexOf("\0");
+      const lev = i >= 0 ? s.slice(0, i) : s;
+      const team = i >= 0 ? s.slice(i + 1) : "—";
+      return { lev: lev || "", team: team || "—" };
+    });
+    parsed.sort((a, b) => {
+      const rd = divRank(a.lev) - divRank(b.lev);
+      return rd !== 0 ? rd : a.team.localeCompare(b.team);
+    });
+    return parsed;
+  }
+
+  function formatHandicapDivisionColumn(parts) {
+    if (!parts.length) return "N/A";
+    return parts.map((p) => p.lev).join("; ");
+  }
+
+  function formatHandicapTeamColumn(parts) {
+    if (!parts.length) return "N/A";
+    return parts.map((p) => p.team).join("; ");
+  }
+
+  async function fetchHandicapScheduleRowsForPlayers(level, year) {
+    const url = `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`;
+    const res = await fetchWithTimeout(url).catch(() => null);
+    if (!res || !res.ok) return [];
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function buildPlayersDirectoryRows(year) {
+    const y = seasonBoxYear(year);
+    const byKey = new Map();
+    function ensure(rawName) {
+      const disp = canonicalPlayerName(rawName);
+      if (!disp) return null;
+      const key = disp.toLowerCase();
+      if (!byKey.has(key)) {
+        byKey.set(key, { displayName: disp, boxes: new Set(), hcPairs: new Set() });
+      }
+      return byKey.get(key);
+    }
+    for (const team of getBoxTeamsForYear(y)) {
+      const roster = getBoxPlayersForYear(team, y);
+      if (!roster || typeof roster !== "object") continue;
+      Object.values(roster).forEach((name) => {
+        const row = ensure(name);
+        if (row) row.boxes.add(team);
+      });
+    }
+    for (const level of ["open", "main"]) {
+      const divLabel = level === "open" ? "Open" : "Main";
+      const rows = await fetchHandicapScheduleRowsForPlayers(level, y);
+      rows.forEach((r) => {
+        const t1 = (r.team1 || "").trim() || "—";
+        const t2 = (r.team2 || "").trim() || "—";
+        splitSchedulePlayerCell(r.team1_players).forEach((n) => {
+          const row = ensure(n);
+          if (row) row.hcPairs.add(`${divLabel}\0${t1}`);
+        });
+        splitSchedulePlayerCell(r.team2_players).forEach((n) => {
+          const row = ensure(n);
+          if (row) row.hcPairs.add(`${divLabel}\0${t2}`);
+        });
+      });
+    }
+    const rosterFix = PLAYER_HANDICAP_CANONICAL_ROSTER.get(y);
+    if (rosterFix) {
+      for (const row of byKey.values()) {
+        const fix = rosterFix.get(row.displayName.toLowerCase());
+        if (fix) {
+          row.hcPairs.clear();
+          row.hcPairs.add(`${fix.division}\0${fix.team}`);
+        }
+      }
+    }
+    const out = [...byKey.values()].map((r) => {
+      const hcParts = sortedHandicapPairParts(r.hcPairs);
+      return {
+        name: r.displayName,
+        box: [...r.boxes].sort((a, b) => a.localeCompare(b)).join(", ") || "—",
+        handicapDivision: formatHandicapDivisionColumn(hcParts),
+        handicapTeam: formatHandicapTeamColumn(hcParts),
+        fn: firstNameSortKey(r.displayName),
+        fn2: r.displayName.toLowerCase(),
+      };
+    });
+    out.sort((a, b) => {
+      const c = a.fn.localeCompare(b.fn);
+      return c !== 0 ? c : a.fn2.localeCompare(b.fn2);
+    });
+    return out;
+  }
+
+  async function renderPlayersTable() {
+    const tbody = document.getElementById("tbody-players");
+    if (!tbody) return;
+    const year = getYearFrom("year-players");
+    tbody.innerHTML = "<tr><td colspan=\"4\">Loading…</td></tr>";
+    try {
+      const rows = await buildPlayersDirectoryRows(year);
+      tbody.innerHTML = "";
+      if (rows.length === 0) {
+        tbody.innerHTML =
+          '<tr><td colspan="4" class="empty-state">No players found for this season.</td></tr>';
+        return;
+      }
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.box)}</td><td>${escapeHtml(row.handicapDivision)}</td><td>${escapeHtml(row.handicapTeam)}</td>`;
+        tbody.appendChild(tr);
+      });
+    } catch (err) {
+      const msg = err && err.message ? err.message : "Unable to load players.";
+      tbody.innerHTML = `<tr><td colspan="4">${escapeHtml(msg)}</td></tr>`;
+    }
   }
 
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -1247,23 +1550,33 @@
     );
   });
 
-  document.querySelectorAll("#schedule-panel-box .box-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll("#schedule-panel-box .box-tab").forEach((t) => {
+  document.querySelectorAll(".schedules-tab").forEach((btn) => {
+    btn.addEventListener("click", () => switchSchedulesBranch(btn.dataset.schedulesBranch));
+  });
+
+  const scheduleBoxTabBar = document.querySelector("#schedule-panel-box .box-tabs");
+  if (scheduleBoxTabBar) {
+    scheduleBoxTabBar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".box-tab");
+      if (!btn || !scheduleBoxTabBar.contains(btn)) return;
+      scheduleBoxTabBar.querySelectorAll(".box-tab").forEach((t) => {
         t.classList.toggle("active", t === btn);
       });
       void renderBoxSchedule();
     });
-  });
+  }
 
-  document.querySelectorAll(".standings-box-tabs .box-tab").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".standings-box-tabs .box-tab").forEach((t) => {
+  const standingsBoxTabBar = document.querySelector("#standings-box .standings-box-tabs");
+  if (standingsBoxTabBar) {
+    standingsBoxTabBar.addEventListener("click", (e) => {
+      const btn = e.target.closest(".box-tab");
+      if (!btn || !standingsBoxTabBar.contains(btn)) return;
+      standingsBoxTabBar.querySelectorAll(".box-tab").forEach((t) => {
         t.classList.toggle("active", t === btn);
       });
       void renderBoxStandings();
     });
-  });
+  }
 
   document.getElementById("league").addEventListener("change", () => {
     const form = document.getElementById("score-form");
@@ -1376,6 +1689,16 @@
   const notificationsStatus = document.getElementById("notifications-status");
   const notificationsRemoveBtn = document.getElementById("notify-remove");
   if (notificationsForm && notificationsStatus && notificationsRemoveBtn) {
+    function setNotificationsStatusUi(text, variant) {
+      notificationsStatus.textContent = text;
+      notificationsStatus.classList.remove(
+        "notifications-status--success",
+        "notifications-status--error"
+      );
+      if (variant === "success") notificationsStatus.classList.add("notifications-status--success");
+      else if (variant === "error") notificationsStatus.classList.add("notifications-status--error");
+    }
+
     notificationsForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const name = notificationsForm.notify_name.value.trim();
@@ -1383,7 +1706,7 @@
       const notifyHandicap = !!notificationsForm.notify_handicap.checked;
       const notifyBox = !!notificationsForm.notify_box.checked;
       if (!name || !email) {
-        notificationsStatus.textContent = "Please enter both name and email.";
+        setNotificationsStatusUi("Please enter both name and email.", "error");
         return;
       }
       try {
@@ -1396,33 +1719,43 @@
         const parts = [];
         if (notifyHandicap) parts.push("handicap league");
         if (notifyBox) parts.push("box league");
-        let msg =
-          parts.length > 0
-            ? `Saved. You'll get email about: ${parts.join(" and ")}.`
-            : "Saved. No leagues selected — you won't receive emails until you check at least one.";
-        if (data.welcome_email_sent) {
-          msg += " Check your inbox for a short confirmation message.";
+        let msg;
+        let variant = "success";
+        if (parts.length > 0) {
+          msg = `You're signed up for email notifications (${parts.join(" and ")}).`;
+          if (data.welcome_email_sent) {
+            msg += " We sent a short confirmation to your inbox.";
+          } else {
+            msg += " Your preferences are saved on the server.";
+          }
+        } else {
+          msg =
+            "Saved. No leagues selected — you won't receive emails until you check at least one.";
+          variant = "neutral";
         }
-        notificationsStatus.textContent = msg;
+        setNotificationsStatusUi(msg, variant);
         refreshNotificationsServerHint();
       } catch (err) {
-        notificationsStatus.textContent = err.message || "Unable to save notification settings.";
+        setNotificationsStatusUi(err.message || "Unable to save notification settings.", "error");
       }
     });
 
     notificationsRemoveBtn.addEventListener("click", async () => {
       const email = notificationsForm.notify_email.value.trim();
       if (!email) {
-        notificationsStatus.textContent = "Enter your email first, then click Remove.";
+        setNotificationsStatusUi("Enter your email first, then click Remove.", "error");
         return;
       }
       try {
         await removeNotificationSubscription(email);
         notificationsForm.notify_handicap.checked = false;
         notificationsForm.notify_box.checked = false;
-        notificationsStatus.textContent = "Your email has been removed from notifications.";
+        notificationsForm.notify_name.value = "";
+        notificationsForm.notify_email.value = "";
+        setNotificationsStatusUi("Your email has been removed from notifications.", "success");
+        refreshNotificationsServerHint();
       } catch (err) {
-        notificationsStatus.textContent = err.message || "Unable to remove email.";
+        setNotificationsStatusUi(err.message || "Unable to remove email.", "error");
       }
     });
   }
