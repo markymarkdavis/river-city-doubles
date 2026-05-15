@@ -12,6 +12,8 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.policy import SMTP as SMTP_POLICY
+from email.utils import formataddr, parseaddr
 
 try:
     from dotenv import load_dotenv
@@ -290,6 +292,25 @@ def _outbound_from_email():
     return raw or "rivercitydoublessquash@gmail.com"
 
 
+def _smtp_from_addresses(from_email: str) -> tuple[str, str]:
+    """
+    Return (From header value, envelope MAIL FROM).
+    Brevo/SendGrid require the envelope sender to match a verified address.
+    RCD_EMAIL_FROM may be 'Name <email@domain.com>' or bare email.
+    """
+    display_default = os.environ.get("RCD_EMAIL_FROM_NAME", "River City Doubles").strip() or "River City Doubles"
+    name, addr = parseaddr(from_email)
+    if not addr:
+        addr = from_email.strip()
+    if not addr or "@" not in addr:
+        raise ValueError(
+            "RCD_EMAIL_FROM must be a verified sender email (optionally 'Name <you@domain.com>')."
+        )
+    if not name:
+        name = display_default
+    return formataddr((name, addr)), addr
+
+
 def _email_transport_configured():
     """True if Resend API key or SMTP password is set (From always has a default for SMTP)."""
     if os.environ.get("RCD_RESEND_API_KEY", "").strip():
@@ -337,9 +358,19 @@ def _send_smtp(from_email, recipients, subject, text_content, html_body):
     use_ssl = os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes")
     timeout = int(os.environ.get("RCD_SMTP_TIMEOUT", "30"))
 
+    if not smtp_pass:
+        return False, "RCD_SMTP_PASS is not set"
+    if not smtp_user:
+        return False, "RCD_SMTP_USER is not set (for Brevo, use your Brevo login email)"
+
+    try:
+        from_header, envelope_from = _smtp_from_addresses(from_email)
+    except ValueError as e:
+        return False, str(e)
+
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = from_email
+    msg["From"] = from_header
     msg["To"] = ", ".join(recipients)
     msg.set_content(text_content)
     if html_body:
@@ -350,16 +381,25 @@ def _send_smtp(from_email, recipients, subject, text_content, html_body):
         if use_ssl:
             with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout, context=ctx) as server:
                 server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
+                server.sendmail(envelope_from, recipients, msg.as_bytes(policy=SMTP_POLICY))
         else:
             with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+                server.ehlo()
                 server.starttls(context=ctx)
+                server.ehlo()
                 server.login(smtp_user, smtp_pass)
-                server.send_message(msg)
-        log.info("SMTP email sent: subject=%r to=%s", subject, len(recipients))
+                server.sendmail(envelope_from, recipients, msg.as_bytes(policy=SMTP_POLICY))
+        log.info(
+            "SMTP email sent: subject=%r from=%s to=%s via %s:%s",
+            subject,
+            envelope_from,
+            recipients,
+            smtp_host,
+            smtp_port,
+        )
         return True, None
     except Exception as e:
-        log.warning("Email send failed (%s:%s ssl=%s): %s", smtp_host, smtp_port, use_ssl, e)
+        log.warning("Email send failed (%s:%s ssl=%s from=%s): %s", smtp_host, smtp_port, use_ssl, envelope_from, e)
         return False, str(e)
 
 
@@ -1006,13 +1046,16 @@ def upsert_subscription():
     init_db()
     ts = now_iso()
     welcome_email_sent = False
+    welcome_email_error = None
+    was_active = False
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT id FROM email_subscriptions WHERE email = ?",
+            "SELECT id, is_active FROM email_subscriptions WHERE email = ?",
             (email,),
         ).fetchone()
         is_new = existing is None
         if existing:
+            was_active = bool(existing["is_active"])
             conn.execute(
                 """UPDATE email_subscriptions
                    SET name = ?, is_active = ?, notify_match = ?, notify_round_standings = ?,
@@ -1048,21 +1091,27 @@ def upsert_subscription():
                 ),
             )
         conn.commit()
-    if is_new and is_active:
-        ok, _err = maybe_send_subscription_welcome(email, name, notify_handicap, notify_box)
+    should_send_welcome = is_active and (is_new or not was_active)
+    if should_send_welcome:
+        ok, err = maybe_send_subscription_welcome(email, name, notify_handicap, notify_box)
         welcome_email_sent = bool(ok)
-        if not ok and _email_transport_configured():
-            log.warning("Subscription welcome email failed for %s", email)
-    return jsonify(
-        {
-            "ok": True,
-            "email": email,
-            "is_active": is_active,
-            "notify_handicap": notify_handicap,
-            "notify_box": notify_box,
-            "welcome_email_sent": welcome_email_sent,
-        }
-    ), 200
+        if not ok:
+            welcome_email_error = err or "Send failed (check server logs and Brevo sender verification)"
+            if _email_transport_configured():
+                log.warning("Subscription welcome email failed for %s: %s", email, welcome_email_error)
+            else:
+                welcome_email_error = "Email not configured on server (RCD_SMTP_PASS or RCD_RESEND_API_KEY)"
+    resp = {
+        "ok": True,
+        "email": email,
+        "is_active": is_active,
+        "notify_handicap": notify_handicap,
+        "notify_box": notify_box,
+        "welcome_email_sent": welcome_email_sent,
+    }
+    if welcome_email_error:
+        resp["welcome_email_error"] = welcome_email_error
+    return jsonify(resp), 200
 
 
 @app.route("/api/notifications/subscriptions", methods=["DELETE"])
@@ -1095,7 +1144,8 @@ def notification_email_status():
             "turso_configured": use_turso(),
             "email_transport_configured": _email_transport_configured(),
             "resend_configured": resend,
-            "smtp_configured": bool(smtp_pass and from_email),
+            "smtp_configured": bool(smtp_pass),
+            "from_email_hint": (from_email[:3] + "…" if len(from_email) > 3 else "") if from_email else "using default From (set RCD_EMAIL_FROM to your Brevo-verified sender)",
             "smtp_host": os.environ.get("RCD_SMTP_HOST", "smtp.sendgrid.net").strip(),
             "smtp_port": int(os.environ.get("RCD_SMTP_PORT", "587")),
             "smtp_ssl": os.environ.get("RCD_SMTP_SSL", "").strip().lower() in ("1", "true", "yes"),

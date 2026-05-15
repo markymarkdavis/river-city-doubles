@@ -1725,6 +1725,10 @@
           msg = `You're signed up for email notifications (${parts.join(" and ")}).`;
           if (data.welcome_email_sent) {
             msg += " We sent a short confirmation to your inbox.";
+          } else if (data.welcome_email_error) {
+            msg += " Your preferences are saved, but the confirmation email could not be sent.";
+            variant = "error";
+            msg += ` (${data.welcome_email_error})`;
           } else {
             msg += " Your preferences are saved on the server.";
           }

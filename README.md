@@ -50,8 +50,18 @@ The app sends mail through **either** [Resend](https://resend.com) (HTTPS) **or*
 | `RCD_SMTP_PORT` | Optional; default `587`. |
 | `RCD_SMTP_USER` | Optional; default `apikey` (SendGrid). |
 | `RCD_SMTP_SSL` | Set to `1` for implicit TLS (e.g. port 465). |
+| `RCD_EMAIL_FROM_NAME` | Optional display name when `RCD_EMAIL_FROM` is only an address (default: `River City Doubles`). |
 
-Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/test-email` with JSON `{"secret":"…","to":"you@example.com"}` to verify delivery.
+Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/test-email` with JSON `{"secret":"…","to":"you@example.com"}` to verify delivery. The same request also accepts **`RCD_CRON_SECRET`** (header `X-RCD-Cron` or JSON `secret`).
+
+**Email not sending (Brevo on Render)** — `/api/notifications/status` can show `smtp_configured: true` while sends still fail. Check:
+
+1. **`RCD_EMAIL_FROM`** must be a **verified sender** in Brevo (Transactional → Senders). Use the exact address, or `River City Doubles <you@yourdomain.com>`.
+2. **`RCD_SMTP_USER`** must be your **Brevo account login email**, not the From address unless they are the same.
+3. **`RCD_SMTP_PASS`** must be the **SMTP key** from Brevo (Transactional → SMTP & API), not the HTTP API key.
+4. **`RCD_SMTP_HOST`** = `smtp-relay.brevo.com`, **`RCD_SMTP_PORT`** = `587`, leave **`RCD_SMTP_SSL`** unset (STARTTLS).
+5. After saving on the site, the API may return **`welcome_email_error`** with the SMTP error text — also check **Render → Logs** for `Email send failed`.
+6. Test after deploy: `curl -X POST https://river-city-doubles.onrender.com/api/notifications/test-email -H "X-RCD-Cron: YOUR_RCD_CRON_SECRET" -H "Content-Type: application/json" -d '{"to":"you@example.com"}'`
 
 **Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The repo includes a GitHub Actions workflow that pings this daily; match reminders and standings also run when someone submits a handicap score.
 
