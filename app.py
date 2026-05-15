@@ -297,7 +297,13 @@ def init_db():
 def notification_today() -> date:
     """Calendar date used for daily cron (default US Eastern)."""
     tz_name = os.environ.get("RCD_NOTIFICATION_TZ", "America/New_York").strip() or "America/New_York"
-    return datetime.now(ZoneInfo(tz_name)).date()
+    try:
+        return datetime.now(ZoneInfo(tz_name)).date()
+    except Exception:
+        # Slim deploy images (e.g. Render) may lack tzdata until the tzdata package is installed.
+        log.warning("Timezone %r unavailable; using UTC-5 for notification date", tz_name)
+        eastern = timezone(timedelta(hours=-5))
+        return datetime.now(eastern).date()
 
 
 def _parse_month_day_token(token: str) -> tuple[int, int]:
@@ -688,7 +694,7 @@ def handicap_schedule_player_norms_for_level(conn, level: str, year: int) -> set
     """Normalized player names on the handicap schedule for this division and season (all weeks)."""
     norms = set()
     rows = conn.execute(
-        """SELECT team1_players, team2_players FROM schedule
+        """SELECT team1, team2, team1_players, team2_players FROM schedule
            WHERE level = ? AND (year = ? OR year IS NULL)""",
         (level, year),
     ).fetchall()
@@ -706,7 +712,7 @@ def normalized_player_handicap_levels_for_year(conn, year: int) -> dict[str, set
     Used so match/standings emails only go to subscribers in the relevant division.
     """
     rows = conn.execute(
-        """SELECT level, team1_players, team2_players FROM schedule
+        """SELECT level, team1, team2, team1_players, team2_players FROM schedule
            WHERE level IN ('open', 'main') AND (year = ? OR year IS NULL)""",
         (year,),
     ).fetchall()
@@ -1494,8 +1500,12 @@ def cron_notifications():
         supplied = (request.args.get("secret") or "").strip()
     if supplied != expected:
         return jsonify({"error": "Invalid secret"}), 401
-    stats = run_notification_checks_for_today()
-    return jsonify({"ok": True, **stats}), 200
+    try:
+        stats = run_notification_checks_for_today()
+        return jsonify({"ok": True, **stats}), 200
+    except Exception as e:
+        log.exception("Cron notification run failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 def _normalize_team_order(level, week, year, team1, team2, games1, games2, team1_players, team2_players, h1, h2):

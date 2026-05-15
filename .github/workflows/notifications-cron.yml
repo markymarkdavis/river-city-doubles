@@ -36,8 +36,14 @@ jobs:
             exit 1
           fi
           echo "POST $CRON_URL"
-          curl -fsS -X POST "$CRON_URL" \
+          http_code=$(curl -sS -o /tmp/cron-response.json -w "%{http_code}" -X POST "$CRON_URL" \
             -H "X-RCD-Cron: $CRON_SECRET" \
-            -H "Accept: application/json"
+            -H "Accept: application/json")
+          echo "HTTP $http_code"
+          cat /tmp/cron-response.json
           echo ""
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::Cron request failed with HTTP $http_code (see response body above)"
+            exit 1
+          fi
           echo "OK"
