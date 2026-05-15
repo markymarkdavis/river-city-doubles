@@ -207,6 +207,25 @@ FULL_BOX_MATCHUP_DATES: list[str] = [
     "Feb 22–28",
 ]
 
+# Matchup order for every box tab (must match static/app.js FULL_BOX_MATCHUPS).
+FULL_BOX_MATCHUPS: list[str] = [
+    "A & D vs B & C",
+    "A & F vs D & E",
+    "B & E vs C & F",
+    "A & B vs D & F",
+    "B & E vs C & D",
+    "A & C vs D & F",
+    "A & E vs B & F",
+    "A & B vs C & E",
+    "B & D vs C & F",
+    "A & E vs C & F",
+    "A & C vs B & D",
+    "B & D vs E & F",
+    "A & D vs C & E",
+    "A & F vs B & E",
+    "C & E vs D & F",
+]
+
 BOX_SCHEDULE_DATES_BY_YEAR: dict[int, dict[str, list[str]]] = {
     2026: {
         "Foo Fighters": [
@@ -336,6 +355,15 @@ def box_week_calendar_contains_date(team: str, week: int, season_year: int, on_d
         return False
     lo, hi = span
     return lo <= on_date <= hi
+
+
+def box_week_deadline_date(team: str, week: int, season_year: int) -> date | None:
+    """Last calendar day of this box round (digest sends at SEND_HOUR ET on this day, if cron runs)."""
+    lab = get_box_week_dates_label(team, week, season_year)
+    if not lab:
+        return None
+    span = parse_box_week_date_span(lab, season_year)
+    return span[1] if span else None
 
 
 def year_uses_explicit_box_list(year: int) -> bool:

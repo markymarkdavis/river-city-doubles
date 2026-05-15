@@ -52,6 +52,8 @@ The app sends mail through **Resend** (HTTPS), **Brevo API** (HTTPS, recommended
 | `RCD_SMTP_USER` | Optional; default `apikey` (SendGrid). |
 | `RCD_SMTP_SSL` | Set to `1` for implicit TLS (e.g. port 465). |
 | `RCD_EMAIL_FROM_NAME` | Optional display name when `RCD_EMAIL_FROM` is only an address (default: `River City Doubles`). |
+| `RCD_NOTIFICATION_TZ` | Optional; IANA timezone for notification dates and send-hour (default `America/New_York`). |
+| `RCD_NOTIFICATION_SEND_HOUR_ET` | Optional; hour `0`–`23` when handicap/box **standings** digests may first go out on the **last calendar day** of that round (default `8`). Interpreted in `RCD_NOTIFICATION_TZ`. |
 
 Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/test-email` with JSON `{"secret":"…","to":"you@example.com"}` to verify delivery. The same request also accepts **`RCD_CRON_SECRET`** (header `X-RCD-Cron` or JSON `secret`).
 
@@ -69,9 +71,9 @@ Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/te
 
 **Where to verify senders in Brevo (not under Transactional):** open [Senders list](https://app.brevo.com/senders/list) or **your account menu (top right) → Settings → Senders, domains & IPs → Senders**. Click **Add a sender**, enter the same email you use for `RCD_EMAIL_FROM`, and complete the verification code Brevo emails to that address. Better long-term: **Domains** tab → authenticate your domain (DKIM), then any `@yourdomain.com` sender is allowed.
 
-**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). Each run **re-checks box score notifications** only for saved scores whose **schedule week includes today’s calendar date** (same idea as handicap reminders staying inside that week’s window), then runs handicap logic during the active handicap calendar window. Submitting a handicap score triggers **standings** emails only (not match reminders). Submitting a **box** score still notifies immediately (no waiting for cron).
+**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). Each run sends **handicap match reminders** during the active week, **handicap standings** when that week’s matches are all scored and the tick is on or after the **last day of the round** at **`RCD_NOTIFICATION_SEND_HOUR_ET`** (default 8:00 in `RCD_NOTIFICATION_TZ`), and **box league standings** digests on the same deadline rule for saved box scores. **`POST /api/scores` does not send email** — digests rely on cron (run at least once after that hour on deadline days, or more often).
 
-**GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` at 4:00 PM Eastern (standard time) with `X-RCD-Cron`.
+**GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` several times on busy days (e.g. every few hours) so deadline-day sends are not missed if you only ping once.
 
 **Render free tier: site “hangs” or times out**  
 Free web services spin down after ~15 minutes of inactivity. The first request after that triggers a **cold start** (often 30–90 seconds), so the site can look like it’s hanging. Options:
@@ -154,7 +156,7 @@ flowchart TB
 | ---- | -------------------- |
 | **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
 | **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
-| **GitHub Actions — `notifications-cron.yml`** | Daily at **21:00 UTC** (~4:00 PM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **21:00 UTC** (~4:00 PM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). That time is **after** the default standings send hour (`RCD_NOTIFICATION_SEND_HOUR_ET`, default 8); add more runs on deadline-heavy days if needed. Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
 | **Render Cron — `river-city-doubles-notifications`** | Same schedule (**21:00 UTC** / ~4:00 PM EST), runs `python scripts/run_notification_cron.py` with `RCD_CRON_SECRET` (see `render.yaml`). |
 | **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
 | **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
@@ -176,8 +178,8 @@ flowchart TB
 ### Typical request flows
 
 1. **View standings (hosted UI)** — Browser loads Pages → `app.js` calls `GET https://river-city-doubles.onrender.com/api/standings/handicap/open` → Flask reads Turso or SQLite → JSON back to the UI.
-2. **Submit a score** — `POST /api/scores` → row stored → for handicap, may trigger week-complete **standings** emails (not match reminders; those are daily cron only).
-3. **Daily notifications** — GitHub Actions cron → `POST /api/cron/notifications` with cron secret → Flask checks only today’s season year and relevant week(s) (Open + Main).
+2. **Submit a score** — `POST /api/scores` → row stored → **no notification email is sent from this request**; standings digests are sent by cron when eligible.
+3. **Cron notifications** — GitHub Actions or another scheduler → `POST /api/cron/notifications` with cron secret → handicap match reminders (during the week), handicap standings when the week is complete and past the round’s deadline morning, box standings digests the same way.
 4. **Local dev** — `python app.py` serves UI + API on port 5000 with local `scores.db`; optional `.env` for Turso or SMTP testing.
 
 ## Run the app

@@ -28,7 +28,12 @@ from flask import Flask, request, jsonify, send_from_directory, send_file, Respo
 from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
-from box_rosters import box_week_calendar_contains_date, get_box_roster_dict
+from box_rosters import (
+    FULL_BOX_MATCHUPS,
+    box_week_deadline_date,
+    get_box_roster_dict,
+    get_box_week_dates_label,
+)
 from rcd_db import DB_PATH, get_db, use_turso
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -296,14 +301,38 @@ def init_db():
 
 def notification_today() -> date:
     """Calendar date used for daily cron (default US Eastern)."""
+    return notification_now_et().date()
+
+
+def notification_now_et() -> datetime:
+    """Current local time for notification scheduling (default America/New_York)."""
     tz_name = os.environ.get("RCD_NOTIFICATION_TZ", "America/New_York").strip() or "America/New_York"
     try:
-        return datetime.now(ZoneInfo(tz_name)).date()
+        return datetime.now(ZoneInfo(tz_name))
     except Exception:
-        # Slim deploy images (e.g. Render) may lack tzdata until the tzdata package is installed.
-        log.warning("Timezone %r unavailable; using UTC-5 for notification date", tz_name)
+        log.warning("Timezone %r unavailable; using UTC-5 for notification datetime", tz_name)
         eastern = timezone(timedelta(hours=-5))
-        return datetime.now(eastern).date()
+        return datetime.now(eastern)
+
+
+def notification_send_hour_et() -> int:
+    """Hour (0–23) when standings/box digests may first send on the deadline day."""
+    raw = os.environ.get("RCD_NOTIFICATION_SEND_HOUR_ET", "8").strip()
+    try:
+        h = int(raw)
+    except ValueError:
+        return 8
+    return max(0, min(23, h))
+
+
+def notification_delivery_allowed_after_deadline(deadline: date, now_et: datetime) -> bool:
+    """Eligible on deadline day at SEND_HOUR_ET or later; after deadline, any time (catch-up)."""
+    today = now_et.date()
+    if today < deadline:
+        return False
+    if today > deadline:
+        return True
+    return now_et.hour >= notification_send_hour_et()
 
 
 def _parse_month_day_token(token: str) -> tuple[int, int]:
@@ -359,17 +388,16 @@ def handicap_week_contains_date(week: int, season_year: int, on_date: date) -> b
 def notification_weeks_for_date(on_date: date, season_year: int) -> dict:
     """
     Weeks to evaluate on a daily cron for on_date.
-    match_week: reminders for unscored matches this week.
-    standings_weeks: current week if complete; previous week only the day after it ends.
+    match_week: reminders for unscored matches this week (None if on_date not in any week window).
+    standings_weeks: handicap weeks whose round ended on or before on_date (digests send only after
+    week's last calendar day reaches SEND_HOUR_ET — see maybe_send_round_standings_notifications).
     """
     match_week = handicap_week_for_date(on_date, season_year)
     standings_weeks: list[int] = []
-    if match_week is not None:
-        standings_weeks.append(match_week)
-        if match_week > 1:
-            _, prev_end = handicap_week_date_bounds(match_week - 1, season_year)
-            if on_date == prev_end + timedelta(days=1):
-                standings_weeks.insert(0, match_week - 1)
+    for week in sorted(WEEK_DATE_RANGES):
+        _, end = handicap_week_date_bounds(week, season_year)
+        if end <= on_date:
+            standings_weeks.append(week)
     return {"match_week": match_week, "standings_weeks": standings_weeks}
 
 
@@ -617,8 +645,9 @@ def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool
         )
     if notify_box:
         topics.append(
-            "Box league — when you opt in, we email you only about scores submitted for your box "
-            "(your name must match the roster for that box and season)."
+            "Box league — season standings snapshot for your box after each round "
+            "(your name must match the roster for that box and season). "
+            "Emails go out on the last morning of each round (US Eastern), not right when a score is posted."
         )
     lines = "\n".join(f"• {t}" for t in topics)
     body = (
@@ -647,10 +676,11 @@ def send_example_notification_email(to_email: str, to_name: str = "there"):
         "  Week 3 (Feb 1–Feb 7), season 2025-2026\n"
         "  Fatty and Friends vs Team Nitro\n\n"
         "Standings example (after all matches in a week are scored for your division):\n"
+        "  Sent on or after the last day of that week (morning US Eastern), not immediately when the last score is posted.\n"
         "  Week 3 is complete for Open handicap (2025-2026).\n"
         "  Current standings: team list and points for Open only.\n\n"
         "—— Box league (only if you check Box league on the form) ——\n"
-        "  A score was submitted for your box (e.g. Pink Floyd), week 4.\n"
+        "  Season standings for your box (games won per player), after each round.\n"
         "  We only send these if your first and last name matches that box roster.\n\n"
         "Use the same first and last name spelling as on the schedule or box sheet when you subscribe.\n"
     )
@@ -693,6 +723,77 @@ def compute_standings_rows(level, year):
         losses = stats["matches"] - stats["wins"]
         standings.append({"name": name, **stats, "record": f"{stats['wins']}-{losses}"})
     return standings
+
+
+_BOX_MATCHUP_RE = re.compile(r"^([A-F]) & ([A-F]) vs ([A-F]) & ([A-F])$")
+
+
+def _parse_box_matchup_sides(matchup: str) -> tuple[list[str], list[str]]:
+    m = _BOX_MATCHUP_RE.match((matchup or "").strip())
+    if not m:
+        return [], []
+    return [m.group(1), m.group(2)], [m.group(3), m.group(4)]
+
+
+def _side_label_to_two_letters(label: str) -> frozenset[str] | None:
+    if not label or not str(label).strip():
+        return None
+    letters: list[str] = []
+    for token in re.split(r"\s*&\s*", str(label).strip()):
+        t = token.strip().upper()
+        if len(t) == 1 and "A" <= t <= "F":
+            letters.append(t)
+        else:
+            return None
+    if len(letters) != 2:
+        return None
+    return frozenset(letters)
+
+
+def compute_box_player_standings_rows(box_team: str, year: int) -> list[dict]:
+    """Season-to-date games won per letter/player for one box; mirrors static/app.js getBoxPlayerTotals."""
+    roster = get_box_roster_dict(box_team, year)
+    totals = {L: 0 for L in "ABCDEF"}
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT week, team1, team2, games1, games2 FROM scores
+               WHERE league = 'box' AND level = ? AND (year = ? OR (year IS NULL AND ? IS NULL))""",
+            (box_team, year, year),
+        ).fetchall()
+    by_week = {int(r["week"]): r for r in rows}
+
+    for idx, matchup in enumerate(FULL_BOX_MATCHUPS):
+        week_num = idx + 1
+        r = by_week.get(week_num)
+        if not r:
+            continue
+        try:
+            g1 = int(r["games1"])
+            g2 = int(r["games2"])
+        except (TypeError, ValueError):
+            continue
+        side1, side2 = _parse_box_matchup_sides(matchup)
+        if len(side1) != 2 or len(side2) != 2:
+            continue
+        s1_set, s2_set = frozenset(side1), frozenset(side2)
+        db_a = _side_label_to_two_letters(r["team1"] or "")
+        db_b = _side_label_to_two_letters(r["team2"] or "")
+        if db_a is None or db_b is None:
+            continue
+        if db_a == s1_set and db_b == s2_set:
+            gs1, gs2 = g1, g2
+        elif db_a == s2_set and db_b == s1_set:
+            gs1, gs2 = g2, g1
+        else:
+            continue
+        for L in side1:
+            totals[L] += gs1
+        for L in side2:
+            totals[L] += gs2
+
+    out = [{"letter": L, "name": (roster.get(L) or "").strip(), "total": totals[L]} for L in "ABCDEF"]
+    out.sort(key=lambda x: (-x["total"], x["letter"]))
+    return out
 
 
 def handicap_schedule_player_norms_for_level(conn, level: str, year: int) -> set:
@@ -760,22 +861,81 @@ def normalized_names_on_box_for_year(conn, box_team: str, year: int) -> set[str]
     return norms
 
 
-def maybe_send_box_score_notifications(
-    box_team: str, week: int, year: int, *, on_date: date | None = None
-) -> int:
+def maybe_send_box_standings_digest_notifications(box_team: str, week: int, year: int, *, now_et: datetime) -> int:
     """
-    After a box score is saved, email notify_box subscribers whose name is on that
-    box roster for this season (sheet + any names on existing scores for the box).
-    One email per subscriber per (box, week, year); requires notify_box = 1.
-    When on_date is set (cron sweep), only sends if that date falls in this box week's
-    schedule window — same cadence as handicap cron reminders.
-    Returns number of emails successfully sent.
+    Email notify_box subscribers (roster/name matched) a season standings snapshot for their box
+    after each round's calendar deadline at SEND_HOUR_ET (cron-driven — not on POST /api/scores).
+
+    One email per subscriber per (box, week, year); idempotent via box_score_notifications_sent.
     """
-    if on_date is not None and not box_week_calendar_contains_date(box_team, week, year, on_date):
+    deadline = box_week_deadline_date(box_team, week, year)
+    if deadline is None:
+        log.info(
+            "Box standings digest skipped (team=%s week=%s year=%s): no schedule date label for this week",
+            box_team,
+            week,
+            year,
+        )
         return 0
+    if not notification_delivery_allowed_after_deadline(deadline, now_et):
+        return 0
+
     init_db()
     if box_team not in BOX_TEAM_NAMES:
         return 0
+
+    date_label = ""
+    dl = get_box_week_dates_label(box_team, week, year)
+    if dl:
+        date_label = f" ({dl})"
+
+    standings_rows = compute_box_player_standings_rows(box_team, year)
+    lines = []
+    for i, row in enumerate(standings_rows, start=1):
+        display = row["name"] or row["letter"]
+        lines.append(f"{i}. {display} — {row['total']} games won")
+    standings_text = "\n".join(lines) if lines else "No recorded scores yet."
+
+    subject = f"River City Doubles: {box_team} standings after week {week}"
+    base_body = (
+        f"Season year {year}. Standings through week {week}{date_label} "
+        f"(games won per player, same as the site box standings tab):\n\n"
+        f"{standings_text}\n"
+    )
+
+    html_ranked = "".join(
+        (
+            "<tr>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{i}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db'>{row['name'] or row['letter']}</td>"
+            f"<td style='padding:8px;border:1px solid #d1d5db;text-align:center'>{row['total']}</td>"
+            "</tr>"
+        )
+        for i, row in enumerate(standings_rows, start=1)
+    )
+    _name_ph = "{name}"
+    html_body = f"""
+<html>
+  <body style="font-family:Arial,sans-serif;color:#111827">
+    <p>Hi {_name_ph},</p>
+    <p>Season year {year}. Standings through week {week}{date_label} (games won per player).</p>
+    <table style='border-collapse:collapse;min-width:420px'>
+      <thead>
+        <tr style='background:#f3f4f6'>
+          <th style='padding:8px;border:1px solid #d1d5db'>#</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Player</th>
+          <th style='padding:8px;border:1px solid #d1d5db'>Games won</th>
+        </tr>
+      </thead>
+      <tbody>
+        {html_ranked}
+      </tbody>
+    </table>
+    <p style='margin-top:16px'>- River City Doubles</p>
+  </body>
+</html>
+"""
+
     with get_db() as conn:
         subs = conn.execute(
             """SELECT name, email FROM email_subscriptions
@@ -793,14 +953,13 @@ def maybe_send_box_score_notifications(
         return 0
     if not roster_norms:
         log.info(
-            "Box score notifications skipped (team=%s week=%s year=%s): no roster or player names on scores for this box",
+            "Box standings digest skipped (team=%s week=%s year=%s): no roster or player names on scores for this box",
             box_team,
             week,
             year,
         )
         return 0
 
-    subject = f"River City Doubles: {box_team} — week {week} score update"
     sent_count = 0
     for s in subs:
         nn = normalize_name(s["name"])
@@ -808,12 +967,13 @@ def maybe_send_box_score_notifications(
             continue
         if s["email"] in sent_emails:
             continue
-        body = (
-            f"A score was submitted for your box \"{box_team}\" "
-            f"(season year {year}), week {week}.\n"
-            "Check the site for schedules and standings.\n"
+        ok, err = send_match_notification_email(
+            s["email"],
+            s["name"],
+            subject,
+            base_body,
+            html_body=html_body.replace("{name}", s["name"]),
         )
-        ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
         if ok:
             sent_count += 1
             with get_db() as conn:
@@ -826,15 +986,14 @@ def maybe_send_box_score_notifications(
                 conn.commit()
             sent_emails.add(s["email"])
         else:
-            log.warning("Box score notification failed for %s: %s", s["email"], err)
+            log.warning("Box standings digest failed for %s: %s", s["email"], err)
     return sent_count
 
 
-def sweep_box_score_notifications_for_season_years(on_date: date) -> int:
+def sweep_box_standings_notifications_for_season_years(now_et: datetime) -> int:
     """
-    Re-run box notifications for saved scores in configured season years whose schedule
-    week contains on_date (cron cadence aligned with handicap week windows).
-    Idempotent via box_score_notifications_sent; POST /api/scores still notifies immediately (no on_date gate).
+    Send box standings digests for saved scores in configured season years when this cron tick is
+    on or after that round's deadline at SEND_HOUR_ET. Idempotent via box_score_notifications_sent.
     """
     allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
     init_db()
@@ -851,10 +1010,10 @@ def sweep_box_score_notifications_for_season_years(on_date: date) -> int:
         if y_raw is not None and y not in allowed:
             continue
         try:
-            total += maybe_send_box_score_notifications(box_team, week, y, on_date=on_date)
+            total += maybe_send_box_standings_digest_notifications(box_team, week, y, now_et=now_et)
         except Exception as e:
             log.warning(
-                "Box notification sweep failed team=%s week=%s year=%s: %s",
+                "Box standings digest sweep failed team=%s week=%s year=%s: %s",
                 box_team,
                 week,
                 y,
@@ -1004,14 +1163,24 @@ def maybe_send_match_play_notifications(
     return sent_count
 
 
-def maybe_send_round_standings_notifications(level, week, year):
+def maybe_send_round_standings_notifications(level, week, year, *, now_et: datetime):
     """
     Send standings digest when all non-bye matches in a week have scores.
+
+    Delivery is cron-driven: eligible on or after the week's last calendar day at SEND_HOUR_ET,
+    not immediately when the final score is posted.
 
     Only subscribers whose saved name appears on the handicap schedule for this
     division (Open or Main) and season receive mail for that division's standings.
     """
     init_db()
+    try:
+        _, week_end = handicap_week_date_bounds(week, year)
+    except ValueError:
+        return 0
+    if not notification_delivery_allowed_after_deadline(week_end, now_et):
+        return 0
+
     with get_db() as conn:
         totals = conn.execute(
             """SELECT
@@ -1485,14 +1654,14 @@ def notification_example_email():
     return jsonify({"ok": False, "error": err}), 500
 
 
-def run_notification_checks_for_today(on_date: date | None = None):
+def run_notification_checks_for_today(on_date: date | None = None, now_et: datetime | None = None):
     """
-    Daily cron: only the active handicap season year and week(s) relevant to on_date.
-    Match reminders for the current week; standings for the current week (if complete)
-    and the prior week only on the day immediately after that week ends.
-    Score-submit hooks still call per-week functions directly.
+    Notification cron: handicap match reminders during the active week window; handicap standings
+    when the week is score-complete and on or after that week's last day at SEND_HOUR_ET;
+    box standings digests on the same deadline rule. Nothing is sent immediately from POST /api/scores.
     """
-    on_date = on_date or notification_today()
+    now_et = now_et or notification_now_et()
+    on_date = on_date or now_et.date()
     year = handicap_season_year_for_date(on_date)
     ctx = notification_weeks_for_date(on_date, year) if year is not None else {}
     stats = {
@@ -1507,7 +1676,7 @@ def run_notification_checks_for_today(on_date: date | None = None):
         "skipped": None,
     }
     try:
-        stats["box_emails_sent"] = sweep_box_score_notifications_for_season_years(on_date)
+        stats["box_emails_sent"] = sweep_box_standings_notifications_for_season_years(now_et)
     except Exception as e:
         stats["errors"] += 1
         log.warning("Box notification sweep failed: %s", e)
@@ -1516,35 +1685,36 @@ def run_notification_checks_for_today(on_date: date | None = None):
         stats["skipped"] = "no active handicap season for this date"
         log.info("Notification cron skipped: %s (%s)", stats["skipped"], on_date)
         return stats
+
     match_week = ctx.get("match_week")
     if match_week is None:
-        stats["skipped"] = "date not in any handicap week for season"
         log.info(
-            "Notification cron skipped: %s (date=%s season_year=%s)",
-            stats["skipped"],
+            "Notification cron: no handicap match week for date=%s season_year=%s (match reminders skipped)",
             on_date,
             year,
         )
-        return stats
+    else:
+        for level in ("open", "main"):
+            try:
+                stats["match_emails_sent"] += (
+                    maybe_send_match_play_notifications(level, match_week, year, on_date=on_date) or 0
+                )
+            except Exception as e:
+                stats["errors"] += 1
+                log.warning(
+                    "Notification tick failed level=%s week=%s year=%s: %s",
+                    level,
+                    match_week,
+                    year,
+                    e,
+                )
+
     standings_weeks = ctx.get("standings_weeks") or []
     for level in ("open", "main"):
-        try:
-            stats["match_emails_sent"] += (
-                maybe_send_match_play_notifications(level, match_week, year, on_date=on_date) or 0
-            )
-        except Exception as e:
-            stats["errors"] += 1
-            log.warning(
-                "Notification tick failed level=%s week=%s year=%s: %s",
-                level,
-                match_week,
-                year,
-                e,
-            )
         for week in standings_weeks:
             try:
                 stats["standings_emails_sent"] += (
-                    maybe_send_round_standings_notifications(level, week, year) or 0
+                    maybe_send_round_standings_notifications(level, week, year, now_et=now_et) or 0
                 )
             except Exception as e:
                 stats["errors"] += 1
@@ -1749,14 +1919,6 @@ def post_score():
                     (level, week, date_range, team1, team2, team1_players, team2_players, handicap, score_str, winner, year),
                 )
             conn.commit()
-    try:
-        if league == "handicap":
-            # Standings only on score submit; match reminders are sent by the daily cron.
-            maybe_send_round_standings_notifications(level, week, year)
-        elif league == "box":
-            maybe_send_box_score_notifications(level, week, year)
-    except Exception as e:
-        log.warning("Notification hook after score failed: %s", e)
     return jsonify({"ok": True}), 201
 
 
