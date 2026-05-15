@@ -69,7 +69,7 @@ Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/te
 
 **Where to verify senders in Brevo (not under Transactional):** open [Senders list](https://app.brevo.com/senders/list) or **your account menu (top right) → Settings → Senders, domains & IPs → Senders**. Click **Add a sender**, enter the same email you use for `RCD_EMAIL_FROM`, and complete the verification code Brevo emails to that address. Better long-term: **Domains** tab → authenticate your domain (DKIM), then any `@yourdomain.com` sender is allowed.
 
-**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The repo includes a GitHub Actions workflow that pings this daily; match reminders and standings also run when someone submits a handicap score.
+**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). The daily job only evaluates the **current handicap season year** and **week(s) for today** (US Eastern by default): match reminders for this week; standings for this week when complete, and for the prior week only on the day after that week ends. Match/standings also run when someone submits a handicap score for that week.
 
 **Render free tier: site “hangs” or times out**  
 Free web services spin down after ~15 minutes of inactivity. The first request after that triggers a **cold start** (often 30–90 seconds), so the site can look like it’s hanging. Options:
@@ -152,7 +152,7 @@ flowchart TB
 | ---- | -------------------- |
 | **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
 | **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
-| **GitHub Actions — `notifications-cron.yml`** | Daily at **14:18 UTC** (~9:18 AM US Eastern in standard time), `POST`s the hosted `/api/cron/notifications` using secrets `NOTIFICATIONS_CRON_URL` and `NOTIFICATIONS_CRON_SECRET` (must match `RCD_CRON_SECRET` on Render). |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **14:18 UTC** (~9:18 AM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
 | **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
 | **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
 | **Render** | Hosts the Flask app (`render.yaml`: **Gunicorn**, health check `/health`, optional **persistent disk** at `/var/data` with `RCD_DB=/var/data/scores.db`). |
@@ -174,7 +174,7 @@ flowchart TB
 
 1. **View standings (hosted UI)** — Browser loads Pages → `app.js` calls `GET https://river-city-doubles.onrender.com/api/standings/handicap/open` → Flask reads Turso or SQLite → JSON back to the UI.
 2. **Submit a score** — `POST /api/scores` → row stored → for handicap, may trigger match-reminder and week-complete standings emails to subscribed players in that division.
-3. **Daily notifications** — GitHub Actions cron → `POST /api/cron/notifications` with cron secret → Flask re-runs notification checks for all weeks/levels/years.
+3. **Daily notifications** — GitHub Actions cron → `POST /api/cron/notifications` with cron secret → Flask checks only today’s season year and relevant week(s) (Open + Main).
 4. **Local dev** — `python app.py` serves UI + API on port 5000 with local `scores.db`; optional `.env` for Turso or SMTP testing.
 
 ## Run the app

@@ -1,4 +1,5 @@
 # Daily ping to POST /api/cron/notifications (see app.py).
+# Server only sends mail for today's handicap season year and relevant week(s).
 #
 # Schedule: GitHub Actions cron is UTC-only. This runs at 14:18 UTC, which is:
 #   • 9:18 AM US Eastern Standard Time (roughly Nov–Mar)

@@ -5,12 +5,14 @@ Stores scores in SQLite and serves standings for handicap open/main.
 import json
 import logging
 import os
+import re
 import smtplib
 import sqlite3
 import ssl
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from email.message import EmailMessage
 from email.policy import SMTP as SMTP_POLICY
 from email.utils import formataddr, parseaddr
@@ -151,6 +153,21 @@ WEEK_DATE_RANGES = {
     7: "Mar 1–Mar 7",
 }
 
+_MONTH_ABBR = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
 # Seasons shown in the year dropdown; exposed via /api/years
 SEASON_YEARS = [2025, 2026]
 # When a request omits year, keep 2025–2026 as the default handicap season
@@ -275,6 +292,74 @@ def init_db():
             )
         """)
         conn.commit()
+
+
+def notification_today() -> date:
+    """Calendar date used for daily cron (default US Eastern)."""
+    tz_name = os.environ.get("RCD_NOTIFICATION_TZ", "America/New_York").strip() or "America/New_York"
+    return datetime.now(ZoneInfo(tz_name)).date()
+
+
+def _parse_month_day_token(token: str) -> tuple[int, int]:
+    parts = token.strip().split()
+    if len(parts) < 2:
+        raise ValueError(f"invalid date token: {token!r}")
+    month = _MONTH_ABBR[parts[0].lower()[:3]]
+    day = int(parts[1])
+    return month, day
+
+
+def handicap_week_date_bounds(week: int, season_year: int) -> tuple[date, date]:
+    """Inclusive start/end dates for a handicap week in a season year."""
+    date_range = WEEK_DATE_RANGES.get(week)
+    if not date_range:
+        raise ValueError(f"unknown week: {week}")
+    left, right = (p.strip() for p in re.split(r"[–\-]", date_range, maxsplit=1))
+    m1, d1 = _parse_month_day_token(left)
+    m2, d2 = _parse_month_day_token(right)
+    start = date(season_year, m1, d1)
+    end = date(season_year, m2, d2)
+    if end < start:
+        end = date(season_year + 1, m2, d2)
+    return start, end
+
+
+def handicap_season_year_for_date(on_date: date) -> int | None:
+    """Season year if on_date falls within that season's handicap weeks."""
+    for year in sorted(SEASON_YEARS, reverse=True):
+        try:
+            season_start, _ = handicap_week_date_bounds(1, year)
+            _, season_end = handicap_week_date_bounds(max(WEEK_DATE_RANGES), year)
+        except ValueError:
+            continue
+        if season_start <= on_date <= season_end:
+            return year
+    return None
+
+
+def handicap_week_for_date(on_date: date, season_year: int) -> int | None:
+    for week in sorted(WEEK_DATE_RANGES):
+        start, end = handicap_week_date_bounds(week, season_year)
+        if start <= on_date <= end:
+            return week
+    return None
+
+
+def notification_weeks_for_date(on_date: date, season_year: int) -> dict:
+    """
+    Weeks to evaluate on a daily cron for on_date.
+    match_week: reminders for unscored matches this week.
+    standings_weeks: current week if complete; previous week only the day after it ends.
+    """
+    match_week = handicap_week_for_date(on_date, season_year)
+    standings_weeks: list[int] = []
+    if match_week is not None:
+        standings_weeks.append(match_week)
+        if match_week > 1:
+            _, prev_end = handicap_week_date_bounds(match_week - 1, season_year)
+            if on_date == prev_end + timedelta(days=1):
+                standings_weeks.insert(0, match_week - 1)
+    return {"match_week": match_week, "standings_weeks": standings_weeks}
 
 
 def normalize_name(name: str) -> str:
@@ -1325,31 +1410,67 @@ def notification_example_email():
     return jsonify({"ok": False, "error": err}), 500
 
 
-def run_notification_checks_for_all_weeks():
+def run_notification_checks_for_today(on_date: date | None = None):
     """
-    Re-run handicap match + standings notification logic for every configured season year,
-    Open/Main, and handicap week. Safe to call repeatedly: sent-* tables prevent duplicates.
+    Daily cron: only the active handicap season year and week(s) relevant to on_date.
+    Match reminders for the current week; standings for the current week (if complete)
+    and the prior week only on the day immediately after that week ends.
+    Score-submit hooks still call per-week functions directly.
     """
-    weeks = sorted(WEEK_DATE_RANGES.keys())
-    years = list(SEASON_YEARS) if SEASON_YEARS else [DEFAULT_SEASON_YEAR]
-    stats = {"match_emails_sent": 0, "standings_emails_sent": 0, "errors": 0}
-    for year in years:
-        for level in ("open", "main"):
-            for week in weeks:
-                try:
-                    stats["match_emails_sent"] += maybe_send_match_play_notifications(level, week, year) or 0
-                    stats["standings_emails_sent"] += (
-                        maybe_send_round_standings_notifications(level, week, year) or 0
-                    )
-                except Exception as e:
-                    stats["errors"] += 1
-                    log.warning(
-                        "Notification tick failed level=%s week=%s year=%s: %s",
-                        level,
-                        week,
-                        year,
-                        e,
-                    )
+    on_date = on_date or notification_today()
+    year = handicap_season_year_for_date(on_date)
+    ctx = notification_weeks_for_date(on_date, year) if year is not None else {}
+    stats = {
+        "date": on_date.isoformat(),
+        "season_year": year,
+        "match_week": ctx.get("match_week"),
+        "standings_weeks": ctx.get("standings_weeks", []),
+        "match_emails_sent": 0,
+        "standings_emails_sent": 0,
+        "errors": 0,
+        "skipped": None,
+    }
+    if year is None:
+        stats["skipped"] = "no active handicap season for this date"
+        log.info("Notification cron skipped: %s (%s)", stats["skipped"], on_date)
+        return stats
+    match_week = ctx.get("match_week")
+    if match_week is None:
+        stats["skipped"] = "date not in any handicap week for season"
+        log.info(
+            "Notification cron skipped: %s (date=%s season_year=%s)",
+            stats["skipped"],
+            on_date,
+            year,
+        )
+        return stats
+    standings_weeks = ctx.get("standings_weeks") or []
+    for level in ("open", "main"):
+        try:
+            stats["match_emails_sent"] += maybe_send_match_play_notifications(level, match_week, year) or 0
+        except Exception as e:
+            stats["errors"] += 1
+            log.warning(
+                "Notification tick failed level=%s week=%s year=%s: %s",
+                level,
+                match_week,
+                year,
+                e,
+            )
+        for week in standings_weeks:
+            try:
+                stats["standings_emails_sent"] += (
+                    maybe_send_round_standings_notifications(level, week, year) or 0
+                )
+            except Exception as e:
+                stats["errors"] += 1
+                log.warning(
+                    "Standings notification failed level=%s week=%s year=%s: %s",
+                    level,
+                    week,
+                    year,
+                    e,
+                )
     return stats
 
 
@@ -1373,7 +1494,7 @@ def cron_notifications():
         supplied = (request.args.get("secret") or "").strip()
     if supplied != expected:
         return jsonify({"error": "Invalid secret"}), 401
-    stats = run_notification_checks_for_all_weeks()
+    stats = run_notification_checks_for_today()
     return jsonify({"ok": True, **stats}), 200
 
 
