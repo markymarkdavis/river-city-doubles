@@ -1706,7 +1706,7 @@
       const notifyHandicap = !!notificationsForm.notify_handicap.checked;
       const notifyBox = !!notificationsForm.notify_box.checked;
       if (!name || !email) {
-        setNotificationsStatusUi("Please enter both name and email.", "error");
+        setNotificationsStatusUi("Please enter your first and last name and your email.", "error");
         return;
       }
       try {

@@ -965,7 +965,7 @@ def upsert_subscription():
     notify_match = 1 if notify_handicap else 0
     notify_round_standings = 1 if notify_handicap else 0
     if not name:
-        return jsonify({"error": "Name is required"}), 400
+        return jsonify({"error": "First and last name is required"}), 400
     if not email or "@" not in email:
         return jsonify({"error": "Valid email is required"}), 400
 

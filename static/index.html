@@ -305,12 +305,20 @@
     <section id="panel-notifications" class="panel" role="tabpanel" aria-labelledby="tab-notifications" hidden>
       <div class="content-card form-card">
         <h2>Email Notifications</h2>
-        <p class="standings-intro notifications-intro">Add your name and email, then choose which leagues you want to hear from.</p>
+        <p class="standings-intro notifications-intro">
+          Enter your <strong>first and last name</strong> and email, then choose which leagues you want to hear from. Your name must match the schedule or box sheet so we can match you to the right emails.
+        </p>
         <p id="notifications-server-hint" class="notifications-server-hint" role="status" aria-live="polite"></p>
         <form id="notifications-form" class="score-form notifications-form">
           <div class="form-row">
-            <label for="notify-name">Name</label>
-            <input type="text" id="notify-name" name="notify_name" placeholder="Your full name" required />
+            <label for="notify-name">First and last name</label>
+            <input
+              type="text"
+              id="notify-name"
+              name="notify_name"
+              placeholder="e.g. Jane Smith (same spelling as schedule or box sheet)"
+              required
+            />
           </div>
           <div class="form-row">
             <label for="notify-email">Email</label>
@@ -332,7 +340,7 @@
                 <div class="notifications-check-body">
                   <label for="notify-handicap" class="notifications-check-title">Handicap league</label>
                   <p id="notify-handicap-desc" class="notifications-check-desc">
-                    Open or Main: reminders when your name is on the schedule for that week; week-complete standings only for the division where your name appears on the schedule (spell your name the same way it appears there).
+                    Use your <strong>first and last name</strong> in the field above, spelled exactly as on the Open or Main schedule for your division. We send reminders when you are listed for a week, and week-complete standings emails only for that division.
                   </p>
                 </div>
               </div>
@@ -347,7 +355,7 @@
                 <div class="notifications-check-body">
                   <label for="notify-box" class="notifications-check-title">Box league</label>
                   <p id="notify-box-desc" class="notifications-check-desc">
-                    When a score is posted for your box, we email you only if your saved name matches that box’s roster for the season (same spelling as the sheet). Handicap emails stay separate unless you also check Handicap league.
+                    Use your <strong>first and last name</strong> in the field above, spelled exactly as on your box’s roster sheet. When a score is posted for your box, we only email you if that name matches. Handicap emails stay separate unless you also check Handicap league.
                   </p>
                 </div>
               </div>
