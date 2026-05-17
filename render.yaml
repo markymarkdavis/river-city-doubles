@@ -10,10 +10,10 @@
 # RCD_EMAIL_FROM + RCD_RESEND_API_KEY (recommended), or RCD_SMTP_* instead — see .env.example
 # and README "Outbound email". Optional: RCD_CRON_SECRET for POST /api/cron/notifications.
 #
-# If you created the web service manually (not from this blueprint), add a Cron Job in the
-# Dashboard with schedule "15 14 * * *" (14:15 UTC = 9:15 AM EST) and startCommand:
-#   python scripts/run_notification_cron.py
-# Set RCD_CRON_SECRET (same as the web service) on the cron job.
+# If you created the web service manually (not from this blueprint), add two Cron Jobs with
+# startCommand: python scripts/run_notification_cron.py and RCD_CRON_SECRET (same as web):
+#   • "0 13 * * *" (13:00 UTC = 8:00 AM EST) — match reminders
+#   • "0 1 * * *" (01:00 UTC = 8:00 PM EST) — standings digests
 
 services:
   - type: web
@@ -42,9 +42,21 @@ services:
       sizeGB: 1
 
   - type: cron
-    name: river-city-doubles-notifications
+    name: river-city-doubles-notifications-morning
     runtime: python
-    schedule: "15 14 * * *"
+    schedule: "0 13 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/run_notification_cron.py
+    envVars:
+      - key: RCD_CRON_SECRET
+        sync: false
+      - key: RCD_NOTIFICATIONS_CRON_URL
+        value: https://river-city-doubles.onrender.com/api/cron/notifications
+
+  - type: cron
+    name: river-city-doubles-notifications-evening
+    runtime: python
+    schedule: "0 1 * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python scripts/run_notification_cron.py
     envVars:

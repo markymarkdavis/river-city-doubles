@@ -372,7 +372,7 @@ def box_week_start_date(team: str, week: int, season_year: int) -> date | None:
 
 
 def box_week_deadline_date(team: str, week: int, season_year: int) -> date | None:
-    """Last calendar day of this box round (digest sends at SEND_HOUR ET on this day, if cron runs)."""
+    """Last calendar day of this box round (standings digest sends at 8 PM ET on this day, if cron runs)."""
     span = box_week_date_bounds(team, week, season_year)
     return span[1] if span else None
 

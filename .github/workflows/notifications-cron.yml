@@ -8,11 +8,10 @@
 # Manual runs (workflow_dispatch) do not prove the schedule is enabled — check the runs list
 # for events labeled "schedule", not only "workflow_dispatch".
 #
-# Schedule: GitHub Actions cron is UTC-only. This runs at 14:15 UTC, which is:
-#   • 9:15 AM US Eastern Standard Time (roughly Nov–Mar)
-#   • 10:15 AM US Eastern Daylight Time (roughly Mar–Nov)
-# For 9:15 AM during daylight saving instead, use: '15 13 * * *'
-# (that is 8:15 AM during standard time).
+# Schedule (UTC-only; two runs per day):
+#   • 13:00 UTC — 8:00 AM EST / 9:00 AM EDT — match reminders (first morning of each round)
+#   • 01:00 UTC — 8:00 PM EST / 9:00 PM EDT — standings digests (last day of each round, after 8 PM ET)
+# For 8:00 AM / 8:00 PM during daylight saving instead, use '0 12 * * *' and '0 0 * * *'.
 #
 # Required repository secrets (Settings → Secrets and variables → Actions):
 #   NOTIFICATIONS_CRON_URL   — full URL, e.g. https://YOUR-APP.onrender.com/api/cron/notifications
@@ -24,8 +23,10 @@ name: Daily notification cron
 
 on:
   schedule:
-    # 14:15 UTC — 9:15 AM EST / 10:15 AM EDT (see timezone note at top)
-    - cron: "15 14 * * *"
+    # Morning — match reminders (see timezone note at top)
+    - cron: "0 13 * * *"
+    # Evening — standings after 8 PM ET on the last day of each round
+    - cron: "0 1 * * *"
   workflow_dispatch: {}
 
 permissions:

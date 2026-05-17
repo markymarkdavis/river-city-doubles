@@ -786,7 +786,7 @@
     }
     el.classList.remove("notifications-server-hint--warn");
     el.textContent =
-      "The server can send email. Match reminders go out on the first morning of each round; standings emails after the round ends (US Eastern). A daily cron triggers these checks.";
+      "The server can send email. Match reminders on the first morning of each round; standings at 8 PM US Eastern on the last day of the round. Cron runs morning and evening.";
   }
 
   async function fetchStandings(league, level) {

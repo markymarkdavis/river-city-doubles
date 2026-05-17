@@ -329,7 +329,7 @@ def notification_now_et() -> datetime:
 
 
 def notification_send_hour_et() -> int:
-    """Hour (0–23) when standings/box digests may first send on the deadline day."""
+    """Hour (0–23) when first-morning match reminders may first send on the round's start day."""
     raw = os.environ.get("RCD_NOTIFICATION_SEND_HOUR_ET", "8").strip()
     try:
         h = int(raw)
@@ -338,19 +338,34 @@ def notification_send_hour_et() -> int:
     return max(0, min(23, h))
 
 
-def notification_delivery_allowed_on_or_after_anchor(anchor_day: date, now_et: datetime) -> bool:
-    """Eligible on anchor_day at SEND_HOUR_ET or later; on later days, any time (catch-up if cron missed anchor day)."""
+def notification_standings_send_hour_et() -> int:
+    """Hour (0–23) when standings digests may first send on the round's last calendar day (default 20 = 8 PM)."""
+    raw = os.environ.get("RCD_NOTIFICATION_STANDINGS_SEND_HOUR_ET", "20").strip()
+    try:
+        h = int(raw)
+    except ValueError:
+        return 20
+    return max(0, min(23, h))
+
+
+def notification_delivery_allowed_on_or_after_anchor(
+    anchor_day: date, now_et: datetime, *, send_hour: int | None = None
+) -> bool:
+    """Eligible on anchor_day at send_hour or later; on later days, any time (catch-up if cron missed anchor day)."""
+    hour = notification_send_hour_et() if send_hour is None else send_hour
     today = now_et.date()
     if today < anchor_day:
         return False
     if today > anchor_day:
         return True
-    return now_et.hour >= notification_send_hour_et()
+    return now_et.hour >= hour
 
 
 def notification_delivery_allowed_after_deadline(deadline: date, now_et: datetime) -> bool:
-    """Eligible on deadline day at SEND_HOUR_ET or later; after deadline, any time (catch-up)."""
-    return notification_delivery_allowed_on_or_after_anchor(deadline, now_et)
+    """Eligible on deadline day at standings send hour (default 8 PM ET) or later; after deadline, any time (catch-up)."""
+    return notification_delivery_allowed_on_or_after_anchor(
+        deadline, now_et, send_hour=notification_standings_send_hour_et()
+    )
 
 
 def _parse_month_day_token(token: str) -> tuple[int, int]:
@@ -408,7 +423,7 @@ def notification_weeks_for_date(on_date: date, season_year: int) -> dict:
     Weeks to evaluate on a daily cron for on_date.
     match_week: handicap week containing on_date (reminders send on/after that week's first morning).
     standings_weeks: handicap weeks whose round ended on or before on_date (digests send only after
-    week's last calendar day reaches SEND_HOUR_ET — see maybe_send_round_standings_notifications).
+    week's last calendar day reaches STANDINGS_SEND_HOUR_ET (default 8 PM) — see maybe_send_round_standings_notifications).
     """
     match_week = handicap_week_for_date(on_date, season_year)
     standings_weeks: list[int] = []
@@ -659,12 +674,12 @@ def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool
     if notify_handicap:
         topics.append(
             "Handicap league — a reminder on the first morning of each week you're scheduled to play "
-            "(US Eastern), and standings after each week once all matches that week have scores."
+            "(US Eastern), and standings after each week once all matches are in (evening of the last day of that week)."
         )
     if notify_box:
         topics.append(
             "Box league — a reminder on the first morning of each box round you're on the roster for, "
-            "plus a season standings snapshot after each round ends. "
+            "plus a season standings snapshot on the evening of the last day of each round. "
             "Your name must match the box roster for that season."
         )
     lines = "\n".join(f"• {t}" for t in topics)
@@ -694,7 +709,7 @@ def send_example_notification_email(to_email: str, to_name: str = "there"):
         "  Week 3 (Feb 1–Feb 7), season 2025-2026\n"
         "  Fatty and Friends vs Team Nitro\n\n"
         "Standings example (after all matches in a week are scored for your division):\n"
-        "  Sent on or after the last day of that week (morning US Eastern), not immediately when the last score is posted.\n"
+        "  Sent on or after 8 PM US Eastern on the last day of that week, not immediately when the last score is posted.\n"
         "  Week 3 is complete for Open handicap (2025-2026).\n"
         "  Current standings: team list and points for Open only.\n\n"
         "—— Box league (only if you check Box league on the form) ——\n"
@@ -899,7 +914,7 @@ def normalized_names_on_box_for_year(conn, box_team: str, year: int) -> set[str]
 def maybe_send_box_standings_digest_notifications(box_team: str, week: int, year: int, *, now_et: datetime) -> int:
     """
     Email notify_box subscribers (roster/name matched) a season standings snapshot for their box
-    after each round's calendar deadline at SEND_HOUR_ET (cron-driven — not on POST /api/scores).
+    after each round's last day at STANDINGS_SEND_HOUR_ET (default 8 PM; cron-driven — not on POST /api/scores).
 
     One email per subscriber per (box, week, year); idempotent via box_score_notifications_sent.
     """
@@ -1153,7 +1168,7 @@ def sweep_box_match_reminders_for_season_years(now_et: datetime) -> int:
 def sweep_box_standings_notifications_for_season_years(now_et: datetime) -> int:
     """
     Send box standings digests for saved scores in configured season years when this cron tick is
-    on or after that round's deadline at SEND_HOUR_ET. Idempotent via box_score_notifications_sent.
+    on or after that round's last day at STANDINGS_SEND_HOUR_ET (default 8 PM). Idempotent via box_score_notifications_sent.
     """
     allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
     init_db()
@@ -1833,8 +1848,8 @@ def notification_example_email():
 def run_notification_checks_for_today(on_date: date | None = None, now_et: datetime | None = None):
     """
     Notification cron: handicap/box match reminders on or after each round's first morning (SEND_HOUR_ET);
-    handicap standings when the week is score-complete and on or after that week's last day;
-    box standings digests on the same deadline rule. Nothing is sent from POST /api/scores.
+    handicap standings when the week is score-complete and on or after 8 PM on that week's last day;
+    box standings digests on the same evening rule. Nothing is sent from POST /api/scores.
     """
     now_et = now_et or notification_now_et()
     on_date = on_date or now_et.date()
