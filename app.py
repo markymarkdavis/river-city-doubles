@@ -733,15 +733,34 @@ def _notification_admin_secret_ok(supplied: str) -> bool:
     return False
 
 
+def dedupe_handicap_score_rows(rows) -> list:
+    """
+    One score row per (week, team pairing). Legacy rows with year IS NULL that duplicate
+    an explicit season year for the same match are dropped in favor of the year'd row.
+    """
+    by_key: dict[tuple, object] = {}
+    for r in rows:
+        week = int(r["week"]) if r["week"] is not None else 0
+        t1, t2 = (r["team1"] or "").strip(), (r["team2"] or "").strip()
+        key = (week, tuple(sorted([t1, t2])))
+        prev = by_key.get(key)
+        if prev is None:
+            by_key[key] = r
+        elif prev["year"] is None and r["year"] is not None:
+            by_key[key] = r
+    return list(by_key.values())
+
+
 def compute_standings_rows(level, year):
     allowed = [t for t in (TEAMS_OPEN if level == "open" else TEAMS_MAIN) if t not in TEAMS_EXCLUDED]
     teams = {name: {"points": 0, "matches": 0, "wins": 0, "gamesWon": 0} for name in allowed}
     with get_db() as conn:
-        rows = conn.execute(
-            """SELECT team1, team2, games1, games2 FROM scores
+        raw = conn.execute(
+            """SELECT week, team1, team2, games1, games2, year FROM scores
                WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
             ("handicap", level, year),
         ).fetchall()
+        rows = dedupe_handicap_score_rows(raw)
     for r in rows:
         t1, t2 = r["team1"], r["team2"]
         g1, g2 = int(r["games1"]), int(r["games2"])
@@ -2136,11 +2155,12 @@ def get_standings(league, level):
     try:
         ensure_db_ready()
         with get_db() as conn:
-            rows = conn.execute(
-                """SELECT team1, team2, games1, games2 FROM scores
+            raw = conn.execute(
+                """SELECT week, team1, team2, games1, games2, year FROM scores
                    WHERE league = ? AND level = ? AND (year = ? OR year IS NULL)""",
                 (league, level, year),
             ).fetchall()
+            rows = dedupe_handicap_score_rows(raw)
     except _DB_API_ERRORS as e:
         return jsonify({"error": "Database error", "detail": str(e)}), 500
 

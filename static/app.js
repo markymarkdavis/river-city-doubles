@@ -798,8 +798,17 @@
     });
     if (!res.ok) throw new Error("Failed to load standings");
     const data = await res.json();
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    const seen = new Set();
+    return data.filter((row) => {
+      const key = String(row.name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
+
+  const handicapStandingsRenderSeq = { open: 0, main: 0 };
 
   function getYearFrom(selectId) {
     const el = document.getElementById(selectId);
@@ -1228,11 +1237,16 @@
   async function renderStandingsTable(standingsId) {
     const isOpen = standingsId === "handicap-open";
     const level = isOpen ? "open" : "main";
-    const tbodyId = `tbody-handicap-${isOpen ? "open" : "main"}`;
+    const seqKey = isOpen ? "open" : "main";
+    const tbodyId = `tbody-handicap-${seqKey}`;
     const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    const seq = ++handicapStandingsRenderSeq[seqKey];
     tbody.innerHTML = "";
     try {
       const rows = await fetchStandings("handicap", level);
+      if (seq !== handicapStandingsRenderSeq[seqKey]) return;
+      tbody.innerHTML = "";
       rows.forEach((row, i) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
@@ -1246,6 +1260,8 @@
         tbody.appendChild(tr);
       });
     } catch (err) {
+      if (seq !== handicapStandingsRenderSeq[seqKey]) return;
+      tbody.innerHTML = "";
       const tr = document.createElement("tr");
       const msg = err && err.message ? err.message : "Unable to load standings. Is the server running?";
       tr.innerHTML = `<td colspan="6">${escapeHtml(msg)}</td>`;
