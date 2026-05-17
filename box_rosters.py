@@ -357,12 +357,23 @@ def box_week_calendar_contains_date(team: str, week: int, season_year: int, on_d
     return lo <= on_date <= hi
 
 
-def box_week_deadline_date(team: str, week: int, season_year: int) -> date | None:
-    """Last calendar day of this box round (digest sends at SEND_HOUR ET on this day, if cron runs)."""
+def box_week_date_bounds(team: str, week: int, season_year: int) -> tuple[date, date] | None:
+    """Inclusive start/end dates for this box round."""
     lab = get_box_week_dates_label(team, week, season_year)
     if not lab:
         return None
-    span = parse_box_week_date_span(lab, season_year)
+    return parse_box_week_date_span(lab, season_year)
+
+
+def box_week_start_date(team: str, week: int, season_year: int) -> date | None:
+    """First calendar day of this box round (match reminders send on/after this day at SEND_HOUR ET)."""
+    span = box_week_date_bounds(team, week, season_year)
+    return span[0] if span else None
+
+
+def box_week_deadline_date(team: str, week: int, season_year: int) -> date | None:
+    """Last calendar day of this box round (digest sends at SEND_HOUR ET on this day, if cron runs)."""
+    span = box_week_date_bounds(team, week, season_year)
     return span[1] if span else None
 
 

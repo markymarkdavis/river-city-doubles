@@ -786,7 +786,7 @@
     }
     el.classList.remove("notifications-server-hint--warn");
     el.textContent =
-      "The server can send email. Handicap reminders and week-complete standings run when scores are submitted; a daily cron is optional for an extra pass.";
+      "The server can send email. Match reminders go out on the first morning of each round; standings emails after the round ends (US Eastern). A daily cron triggers these checks.";
   }
 
   async function fetchStandings(league, level) {

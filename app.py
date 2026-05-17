@@ -30,7 +30,9 @@ from werkzeug.exceptions import HTTPException
 
 from box_rosters import (
     FULL_BOX_MATCHUPS,
+    box_week_date_bounds,
     box_week_deadline_date,
+    box_week_start_date,
     get_box_roster_dict,
     get_box_week_dates_label,
 )
@@ -296,6 +298,17 @@ def init_db():
                 UNIQUE(email, level, week, year)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS box_match_reminders_sent (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                level TEXT NOT NULL,
+                week INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                sent_at TEXT NOT NULL,
+                UNIQUE(email, level, week, year)
+            )
+        """)
         conn.commit()
 
 
@@ -325,14 +338,19 @@ def notification_send_hour_et() -> int:
     return max(0, min(23, h))
 
 
-def notification_delivery_allowed_after_deadline(deadline: date, now_et: datetime) -> bool:
-    """Eligible on deadline day at SEND_HOUR_ET or later; after deadline, any time (catch-up)."""
+def notification_delivery_allowed_on_or_after_anchor(anchor_day: date, now_et: datetime) -> bool:
+    """Eligible on anchor_day at SEND_HOUR_ET or later; on later days, any time (catch-up if cron missed anchor day)."""
     today = now_et.date()
-    if today < deadline:
+    if today < anchor_day:
         return False
-    if today > deadline:
+    if today > anchor_day:
         return True
     return now_et.hour >= notification_send_hour_et()
+
+
+def notification_delivery_allowed_after_deadline(deadline: date, now_et: datetime) -> bool:
+    """Eligible on deadline day at SEND_HOUR_ET or later; after deadline, any time (catch-up)."""
+    return notification_delivery_allowed_on_or_after_anchor(deadline, now_et)
 
 
 def _parse_month_day_token(token: str) -> tuple[int, int]:
@@ -388,7 +406,7 @@ def handicap_week_contains_date(week: int, season_year: int, on_date: date) -> b
 def notification_weeks_for_date(on_date: date, season_year: int) -> dict:
     """
     Weeks to evaluate on a daily cron for on_date.
-    match_week: reminders for unscored matches this week (None if on_date not in any week window).
+    match_week: handicap week containing on_date (reminders send on/after that week's first morning).
     standings_weeks: handicap weeks whose round ended on or before on_date (digests send only after
     week's last calendar day reaches SEND_HOUR_ET — see maybe_send_round_standings_notifications).
     """
@@ -640,14 +658,14 @@ def maybe_send_subscription_welcome(email: str, name: str, notify_handicap: bool
     topics = []
     if notify_handicap:
         topics.append(
-            "Handicap league — reminders when you're on the schedule (until the match is scored), "
-            "and standings after each week once all matches that week have scores."
+            "Handicap league — a reminder on the first morning of each week you're scheduled to play "
+            "(US Eastern), and standings after each week once all matches that week have scores."
         )
     if notify_box:
         topics.append(
-            "Box league — season standings snapshot for your box after each round "
-            "(your name must match the roster for that box and season). "
-            "Emails go out on the last morning of each round (US Eastern), not right when a score is posted."
+            "Box league — a reminder on the first morning of each box round you're on the roster for, "
+            "plus a season standings snapshot after each round ends. "
+            "Your name must match the box roster for that season."
         )
     lines = "\n".join(f"• {t}" for t in topics)
     body = (
@@ -671,7 +689,7 @@ def send_example_notification_email(to_email: str, to_name: str = "there"):
     body = (
         "This is an example of the kinds of emails you may receive after signing up on the site.\n\n"
         "—— Handicap league (when you opt in) ——\n"
-        "Match reminder example:\n"
+        "Match reminder example (first morning of the week, US Eastern):\n"
         "  You are listed in an upcoming Open handicap match.\n"
         "  Week 3 (Feb 1–Feb 7), season 2025-2026\n"
         "  Fatty and Friends vs Team Nitro\n\n"
@@ -680,7 +698,8 @@ def send_example_notification_email(to_email: str, to_name: str = "there"):
         "  Week 3 is complete for Open handicap (2025-2026).\n"
         "  Current standings: team list and points for Open only.\n\n"
         "—— Box league (only if you check Box league on the form) ——\n"
-        "  Season standings for your box (games won per player), after each round.\n"
+        "  First-morning reminder for your box round with the week's matchup.\n"
+        "  Season standings for your box (games won per player) after each round ends.\n"
         "  We only send these if your first and last name matches that box roster.\n\n"
         "Use the same first and last name spelling as on the schedule or box sheet when you subscribe.\n"
     )
@@ -748,6 +767,22 @@ def _side_label_to_two_letters(label: str) -> frozenset[str] | None:
     if len(letters) != 2:
         return None
     return frozenset(letters)
+
+
+def box_week_matchup_player_names(box_team: str, week: int, year: int) -> tuple[str, list[str], list[str]]:
+    """(matchup label, side1 display names, side2 display names) for this box week."""
+    if week < 1 or week > len(FULL_BOX_MATCHUPS):
+        return "", [], []
+    matchup = FULL_BOX_MATCHUPS[week - 1]
+    roster = get_box_roster_dict(box_team, year)
+    letters1, letters2 = _parse_box_matchup_sides(matchup)
+    if len(letters1) != 2 or len(letters2) != 2:
+        return matchup, [], []
+
+    def side_names(letters: list[str]) -> list[str]:
+        return [(roster.get(L) or L).strip() for L in letters if (roster.get(L) or L).strip()]
+
+    return matchup, side_names(letters1), side_names(letters2)
 
 
 def compute_box_player_standings_rows(box_team: str, year: int) -> list[dict]:
@@ -990,6 +1025,131 @@ def maybe_send_box_standings_digest_notifications(box_team: str, week: int, year
     return sent_count
 
 
+def maybe_send_box_match_play_reminders(box_team: str, week: int, year: int, *, now_et: datetime) -> int:
+    """
+    On the first morning of a box round (SEND_HOUR_ET US Eastern), email notify_box subscribers
+    on that box roster about the week's matchup. Skips if a score is already saved for that week.
+    One email per subscriber per (box, week, year); idempotent via box_match_reminders_sent.
+    """
+    week_start = box_week_start_date(box_team, week, year)
+    if week_start is None:
+        return 0
+    if not notification_delivery_allowed_on_or_after_anchor(week_start, now_et):
+        return 0
+    bounds = box_week_date_bounds(box_team, week, year)
+    if bounds and now_et.date() > bounds[1]:
+        return 0
+
+    init_db()
+    if box_team not in BOX_TEAM_NAMES:
+        return 0
+
+    matchup, side1_names, side2_names = box_week_matchup_player_names(box_team, week, year)
+    if not matchup or (not side1_names and not side2_names):
+        log.info(
+            "Box match reminder skipped (team=%s week=%s year=%s): no matchup or roster names",
+            box_team,
+            week,
+            year,
+        )
+        return 0
+
+    date_label = get_box_week_dates_label(box_team, week, year) or ""
+    side1_txt = " & ".join(side1_names) if side1_names else "—"
+    side2_txt = " & ".join(side2_names) if side2_names else "—"
+    all_players = side1_names + side2_names
+
+    with get_db() as conn:
+        scored = conn.execute(
+            """SELECT 1 FROM scores
+               WHERE league = 'box' AND level = ? AND week = ?
+                 AND (year = ? OR (year IS NULL AND ? IS NULL))
+               LIMIT 1""",
+            (box_team, week, year, year),
+        ).fetchone()
+        if scored:
+            return 0
+        subs = conn.execute(
+            """SELECT name, email FROM email_subscriptions
+               WHERE is_active = 1 AND notify_box = 1""",
+        ).fetchall()
+        roster_norms = normalized_names_on_box_for_year(conn, box_team, year)
+        sent_rows = conn.execute(
+            """SELECT email FROM box_match_reminders_sent
+               WHERE level = ? AND week = ? AND year = ?""",
+            (box_team, week, year),
+        ).fetchall()
+        sent_emails = {r["email"] for r in sent_rows}
+
+    if not subs or not roster_norms:
+        return 0
+
+    subject = f"River City Doubles: {box_team} — week {week} match"
+    sent_count = 0
+    for s in subs:
+        nn = normalize_name(s["name"])
+        if nn not in roster_norms:
+            continue
+        if s["email"] in sent_emails:
+            continue
+        on_side = None
+        for nm in all_players:
+            if normalize_name(nm) == nn:
+                if nm in side1_names:
+                    on_side = side1_txt
+                elif nm in side2_names:
+                    on_side = side2_txt
+                break
+        side_note = f"\nYour side this week: {on_side}.\n" if on_side else ""
+        body = (
+            f"Your box \"{box_team}\" has a match for week {week}"
+            f"{f' ({date_label})' if date_label else ''}.\n\n"
+            f"Matchup: {matchup}\n"
+            f"{side1_txt} vs {side2_txt}\n"
+            f"{side_note}\n"
+            "Enter scores on the site when your match is done.\n"
+        )
+        ok, err = send_match_notification_email(s["email"], s["name"], subject, body)
+        if ok:
+            sent_count += 1
+            with get_db() as conn:
+                conn.execute(
+                    """INSERT OR IGNORE INTO box_match_reminders_sent
+                       (email, level, week, year, sent_at)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (s["email"], box_team, week, year, now_iso()),
+                )
+                conn.commit()
+            sent_emails.add(s["email"])
+        else:
+            log.warning("Box match reminder failed for %s: %s", s["email"], err)
+    return sent_count
+
+
+def sweep_box_match_reminders_for_season_years(now_et: datetime) -> int:
+    """First-morning box match reminders for all teams/weeks with schedule labels in configured years."""
+    allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
+    init_db()
+    total = 0
+    max_week = len(FULL_BOX_MATCHUPS)
+    for y in allowed:
+        for box_team in sorted(BOX_TEAM_NAMES):
+            for week in range(1, max_week + 1):
+                if get_box_week_dates_label(box_team, week, y) is None:
+                    continue
+                try:
+                    total += maybe_send_box_match_play_reminders(box_team, week, y, now_et=now_et)
+                except Exception as e:
+                    log.warning(
+                        "Box match reminder sweep failed team=%s week=%s year=%s: %s",
+                        box_team,
+                        week,
+                        y,
+                        e,
+                    )
+    return total
+
+
 def sweep_box_standings_notifications_for_season_years(now_et: datetime) -> int:
     """
     Send box standings digests for saved scores in configured season years when this cron tick is
@@ -1027,23 +1187,39 @@ def maybe_send_match_play_notifications(
     week,
     year,
     *,
+    now_et: datetime | None = None,
     on_date: date | None = None,
     only_match: tuple[str, str] | None = None,
 ):
     """
     Notify subscribed players about unscored matches in this handicap week.
 
-    on_date: only send when this calendar day falls in the week's date range (cron uses today).
+    Sends on or after the week's first calendar day at SEND_HOUR_ET (not every day of the week).
     only_match: if set, only evaluate that team pairing (not used by daily cron).
     """
-    on_date = on_date or notification_today()
-    if not handicap_week_contains_date(week, year, on_date):
+    now_et = now_et or notification_now_et()
+    on_date = on_date or now_et.date()
+    try:
+        week_start, week_end = handicap_week_date_bounds(week, year)
+    except ValueError:
+        return 0
+    if not notification_delivery_allowed_on_or_after_anchor(week_start, now_et):
         log.info(
-            "Match notifications skipped (level=%s week=%s year=%s): %s not in week range",
+            "Match notifications skipped (level=%s week=%s year=%s): before first morning of week (%s)",
+            level,
+            week,
+            year,
+            week_start,
+        )
+        return 0
+    if on_date > week_end:
+        log.info(
+            "Match notifications skipped (level=%s week=%s year=%s): %s after week end %s",
             level,
             week,
             year,
             on_date,
+            week_end,
         )
         return 0
     init_db()
@@ -1656,9 +1832,9 @@ def notification_example_email():
 
 def run_notification_checks_for_today(on_date: date | None = None, now_et: datetime | None = None):
     """
-    Notification cron: handicap match reminders during the active week window; handicap standings
-    when the week is score-complete and on or after that week's last day at SEND_HOUR_ET;
-    box standings digests on the same deadline rule. Nothing is sent immediately from POST /api/scores.
+    Notification cron: handicap/box match reminders on or after each round's first morning (SEND_HOUR_ET);
+    handicap standings when the week is score-complete and on or after that week's last day;
+    box standings digests on the same deadline rule. Nothing is sent from POST /api/scores.
     """
     now_et = now_et or notification_now_et()
     on_date = on_date or now_et.date()
@@ -1671,15 +1847,21 @@ def run_notification_checks_for_today(on_date: date | None = None, now_et: datet
         "standings_weeks": ctx.get("standings_weeks", []),
         "match_emails_sent": 0,
         "standings_emails_sent": 0,
+        "box_match_emails_sent": 0,
         "box_emails_sent": 0,
         "errors": 0,
         "skipped": None,
     }
     try:
+        stats["box_match_emails_sent"] = sweep_box_match_reminders_for_season_years(now_et)
+    except Exception as e:
+        stats["errors"] += 1
+        log.warning("Box match reminder sweep failed: %s", e)
+    try:
         stats["box_emails_sent"] = sweep_box_standings_notifications_for_season_years(now_et)
     except Exception as e:
         stats["errors"] += 1
-        log.warning("Box notification sweep failed: %s", e)
+        log.warning("Box standings notification sweep failed: %s", e)
 
     if year is None:
         stats["skipped"] = "no active handicap season for this date"
@@ -1697,7 +1879,10 @@ def run_notification_checks_for_today(on_date: date | None = None, now_et: datet
         for level in ("open", "main"):
             try:
                 stats["match_emails_sent"] += (
-                    maybe_send_match_play_notifications(level, match_week, year, on_date=on_date) or 0
+                    maybe_send_match_play_notifications(
+                        level, match_week, year, now_et=now_et, on_date=on_date
+                    )
+                    or 0
                 )
             except Exception as e:
                 stats["errors"] += 1

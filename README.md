@@ -71,7 +71,7 @@ Optional: `RCD_NOTIFICATION_TEST_SECRET` — enables `POST /api/notifications/te
 
 **Where to verify senders in Brevo (not under Transactional):** open [Senders list](https://app.brevo.com/senders/list) or **your account menu (top right) → Settings → Senders, domains & IPs → Senders**. Click **Add a sender**, enter the same email you use for `RCD_EMAIL_FROM`, and complete the verification code Brevo emails to that address. Better long-term: **Domains** tab → authenticate your domain (DKIM), then any `@yourdomain.com` sender is allowed.
 
-**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). Each run sends **handicap match reminders** during the active week, **handicap standings** when that week’s matches are all scored and the tick is on or after the **last day of the round** at **`RCD_NOTIFICATION_SEND_HOUR_ET`** (default 8:00 in `RCD_NOTIFICATION_TZ`), and **box league standings** digests on the same deadline rule for saved box scores. **`POST /api/scores` does not send email** — digests rely on cron (run at least once after that hour on deadline days, or more often).
+**Cron:** `RCD_CRON_SECRET` enables `POST /api/cron/notifications` (header `X-RCD-Cron` or JSON `secret`). Each run sends **handicap and box match reminders** on or after the **first morning** of each round (`RCD_NOTIFICATION_SEND_HOUR_ET`, default 8:00 in `RCD_NOTIFICATION_TZ`), **handicap standings** when that week’s matches are all scored and the tick is on or after the **last day** of the round at that hour, and **box standings** digests on the same last-day rule. **`POST /api/scores` does not send email** — the scheduled job runs daily at **9:15 AM US Eastern** (14:15 UTC; 10:15 AM during daylight saving).
 
 **GitHub Actions schedule not running?** Scheduled workflows only run from the **default branch** (`main`), with Actions enabled. In **Actions → Daily notification cron**, open the **⋯** menu and choose **Enable workflow** if it was disabled. Successful manual runs (`workflow_dispatch`) are separate from scheduled runs — look for runs whose trigger is **schedule**. GitHub may delay cron by up to ~15 minutes. As a backup, use an external pinger (e.g. [cron-job.org](https://cron-job.org)) to `POST` `/api/cron/notifications` several times on busy days (e.g. every few hours) so deadline-day sends are not missed if you only ping once.
 
@@ -156,8 +156,8 @@ flowchart TB
 | ---- | -------------------- |
 | **GitHub** | Source control; hosts the repo and **GitHub Pages** for the public UI (`static/` only). |
 | **GitHub Actions — `gh-pages.yml`** | On push to `main`, uploads `static/` and deploys to GitHub Pages. |
-| **GitHub Actions — `notifications-cron.yml`** | Daily at **21:00 UTC** (~4:00 PM US Eastern in standard time), `POST`s `/api/cron/notifications` (today’s season/week only). That time is **after** the default standings send hour (`RCD_NOTIFICATION_SEND_HOUR_ET`, default 8); add more runs on deadline-heavy days if needed. Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
-| **Render Cron — `river-city-doubles-notifications`** | Same schedule (**21:00 UTC** / ~4:00 PM EST), runs `python scripts/run_notification_cron.py` with `RCD_CRON_SECRET` (see `render.yaml`). |
+| **GitHub Actions — `notifications-cron.yml`** | Daily at **14:15 UTC** (**9:15 AM** US Eastern in standard time), `POST`s `/api/cron/notifications`. That time is **after** the default first-send hour (`RCD_NOTIFICATION_SEND_HOUR_ET`, default 8). Secrets: `NOTIFICATIONS_CRON_URL`, `NOTIFICATIONS_CRON_SECRET` (= `RCD_CRON_SECRET` on Render). |
+| **Render Cron — `river-city-doubles-notifications`** | Same schedule (**14:15 UTC** / 9:15 AM EST), runs `python scripts/run_notification_cron.py` with `RCD_CRON_SECRET` (see `render.yaml`). |
 | **GitHub Pages** | Serves `index.html`, `app.js`, `styles.css`, images, and PWA assets. Cannot run Python or store scores. |
 | **`static/config.js`** | Sets `window.RCD_API_BASE` to the Render URL when the UI is on `github.io`; uses same-origin when opened on localhost or `river-city-doubles.onrender.com`. |
 | **Render** | Hosts the Flask app (`render.yaml`: **Gunicorn**, health check `/health`, optional **persistent disk** at `/var/data` with `RCD_DB=/var/data/scores.db`). |
@@ -172,14 +172,14 @@ flowchart TB
 | **python-dotenv** | Loads `.env` locally for secrets (see `.env.example`); not used on Render (env vars in dashboard). |
 | **Browser PWA** | `manifest.webmanifest` + `sw.js` for installable UI; `app.js` talks to the API and manages schedules, standings, players, and notification signup. |
 | **`box_rosters.py`** | Server-side box player lists (aligned with `static/app.js`) for box-league notification matching. |
-| **Seed / maintenance scripts** | `seed_schedule.py`, `seed_main_schedule.py`, `seed_recovered_2025.py`, `backfill_standings_from_schedule.py` populate schedule/scores; `pull_from_hosted.py` / `push_to_hosted.py` sync via HTTP API; `scripts/sync_local_schedule_scores_to_turso.py` copies local `schedule`+`scores` to Turso; `scripts/fix_player_name_spellings.py` and `scripts/send_example_email.py` for one-off fixes and tests. |
+| **Seed / maintenance scripts** | `seed_schedule.py`, `seed_main_schedule.py`, `seed_recovered_2025.py`, `backfill_standings_from_schedule.py` populate schedule/scores; `pull_from_hosted.py` / `push_to_hosted.py` sync via HTTP API; `scripts/sync_local_schedule_scores_to_turso.py` copies local `schedule`+`scores` to Turso; `scripts/fix_player_name_spellings.py` and `scripts/send_example_email.py` for one-off fixes and tests; `scripts/test_notifications_idempotent.py` runs the cron logic twice at the same instant and asserts sent-log tables don’t grow on the second pass (duplicate-send regression check). |
 | **UptimeRobot (optional)** | External ping to `/health` every few minutes to reduce Render free-tier cold starts (see **Render free tier** below). |
 
 ### Typical request flows
 
 1. **View standings (hosted UI)** — Browser loads Pages → `app.js` calls `GET https://river-city-doubles.onrender.com/api/standings/handicap/open` → Flask reads Turso or SQLite → JSON back to the UI.
 2. **Submit a score** — `POST /api/scores` → row stored → **no notification email is sent from this request**; standings digests are sent by cron when eligible.
-3. **Cron notifications** — GitHub Actions or another scheduler → `POST /api/cron/notifications` with cron secret → handicap match reminders (during the week), handicap standings when the week is complete and past the round’s deadline morning, box standings digests the same way.
+3. **Cron notifications** — GitHub Actions or another scheduler → `POST /api/cron/notifications` with cron secret → first-morning match reminders (handicap + box), handicap standings when the week is complete and past the round’s deadline morning, box standings digests the same way.
 4. **Local dev** — `python app.py` serves UI + API on port 5000 with local `scores.db`; optional `.env` for Turso or SMTP testing.
 
 ## Run the app
