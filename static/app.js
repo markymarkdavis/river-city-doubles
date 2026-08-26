@@ -168,6 +168,8 @@
   const BOX_TEAMS = Object.keys(BOX_PLAYERS || {});
 
   // Full 15 matchups from the Schedule tab (all boxes follow this order).
+  const BOX_WEEK_COUNT = 15;
+
   const FULL_BOX_MATCHUPS = [
     { matchup: "A & D vs B & C", dates: "Nov 2–8" },
     { matchup: "A & F vs D & E", dates: "Nov 9–15" },
@@ -316,30 +318,138 @@
     ],
   };
 
-  // 2026–2027 season (year select value 2026): overrides per box when present.
+  // 2026–2027 season: jam-band boxes (1×5-player, 8×6-player).
+  // Matchups maximize partner shuffle and avoid consecutive sit-outs.
+  const BOX_DATES_6_2026 = [
+    "Aug 30–Sep 12",
+    "Sep 13–Sep 26",
+    "Sep 27–Oct 10",
+    "Oct 11–Oct 24",
+    "Oct 25–Nov 7",
+    "Nov 8–Nov 21",
+    "Nov 22–Dec 5",
+    "self scheduled match",
+    "self scheduled match",
+  ];
+  const BOX_DATES_5_2026 = BOX_DATES_6_2026.concat(["self scheduled match"]);
+
+  const BOX_MATCHUPS_6_2026 = [
+    "A & D vs B & C",
+    "A & F vs D & E",
+    "B & D vs C & F",
+    "A & B vs C & E",
+    "B & D vs E & F",
+    "A & C vs D & F",
+    "A & E vs B & F",
+    "B & E vs C & D",
+    "A & E vs C & F",
+  ];
+  const BOX_MATCHUPS_5_2026 = [
+    "A & D vs C & E",
+    "A & B vs C & D",
+    "B & C vs D & E",
+    "A & B vs D & E",
+    "A & C vs B & E",
+    "A & E vs C & D",
+    "A & C vs B & D",
+    "B & D vs C & E",
+    "A & D vs B & E",
+    "A & E vs B & C",
+  ];
+
+  function buildBoxScheduleRows(matchups, dates) {
+    return matchups.map((matchup, idx) => ({
+      matchup,
+      dates: dates[idx] || "",
+      team1: "",
+      team2: "",
+    }));
+  }
+
   const BOX_PLAYERS_2026 = {
-    "Foo Fighters": {
-      A: "Mark Davis",
-      B: "Jim Davis",
-      C: "Sanjay Hinduja",
-      D: "Grant Stevens",
-      E: "Andy Mack",
+    Phish: {
+      A: "Patrick Chifunda",
+      B: "Mark Davis",
+      C: "Josh Wishnack",
+      D: "Scott Harrison",
+      E: "Rene Valdes",
+    },
+    "Grateful Dead": {
+      A: "John Street",
+      B: "Robert Angle",
+      C: "George Stephenson",
+      D: "Michael Jarvis",
+      E: "Rand Robins",
       F: "Eddie O'Leary",
+    },
+    "Widespread Panic": {
+      A: "Manoli Loupassi",
+      B: "Michael Halloran",
+      C: "Andy Mack",
+      D: "Jimmy Meadows",
+      E: "Kijoon Kim",
+      F: "Jon Rasich",
+    },
+    "String Cheese Incident": {
+      A: "Charles Kempe",
+      B: "Ros Bowers",
+      C: "Jeff Clarke",
+      D: "Jim Davis",
+      E: "Peter Thacker",
+      F: "Shelton Horsley",
+    },
+    Goose: {
+      A: "Monty Geho",
+      B: "Sanjay Hinduja",
+      C: "David Shepardson",
+      D: "Tommy Richards",
+      E: "John Patton Jr",
+      F: "Berkeley Edmunds",
+    },
+    "Umphrey's McGee": {
+      A: "Feizel Bobert",
+      B: "Tom Mitchell",
+      C: "Rick Morris",
+      D: "Matt Chriss",
+      E: "Jimmy Cooke",
+      F: "Mukul Paithane",
+    },
+    "Disco Biscuits": {
+      A: "Dean King",
+      B: "Spencer Williamson",
+      C: "Frank de Venoge",
+      D: "Teddy Damgard",
+      E: "Alan Burke",
+      F: "Jack Hager",
+    },
+    Lettuce: {
+      A: "Robert Gentil",
+      B: "Bob Reynolds",
+      C: "Skylyr Philips",
+      D: "Heidi Stevenson",
+      E: "Nick Farrell",
+      F: "Clark Warthen",
+    },
+    Lotus: {
+      A: "Andrew Fois",
+      B: "John Farmer",
+      C: "Chris Dickey",
+      D: "Gabe Hakim",
+      E: "Deesh Bhattal",
+      F: "Robert Huff",
     },
   };
 
   const BOX_SCHEDULES_2026 = {
-    "Foo Fighters": [
-      { matchup: "A & D vs B & C", dates: "May 12, 2026", team1: "", team2: "" },
-      { matchup: "A & F vs D & E", dates: "May 13, 2026", team1: "", team2: "" },
-      { matchup: "B & E vs C & F", dates: "May 14, 2026", team1: "", team2: "" },
-      { matchup: "A & B vs D & F", dates: "May 15, 2026", team1: "", team2: "" },
-      { matchup: "B & E vs C & D", dates: "May 16, 2026", team1: "", team2: "" },
-      { matchup: "A & C vs D & F", dates: "May 17, 2026", team1: "", team2: "" },
-      { matchup: "A & E vs B & F", dates: "May 18, 2026", team1: "", team2: "" },
-      { matchup: "A & B vs C & E", dates: "May 19, 2026", team1: "", team2: "" },
-      { matchup: "B & D vs C & F", dates: "May 20, 2026", team1: "", team2: "" },
-    ],
+    Phish: buildBoxScheduleRows(BOX_MATCHUPS_5_2026, BOX_DATES_5_2026),
+    "Grateful Dead": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    "Widespread Panic": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    "String Cheese Incident": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    Goose: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    "Umphrey's McGee": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    "Disco Biscuits": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    Lettuce: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    Lotus: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
   };
 
   /** When a year is listed here, only boxes with both roster + schedule rows appear for that season. */
@@ -427,6 +537,15 @@
     return BOX_SCHEDULES[team] || [];
   }
 
+  /** Canonical matchup list for this box/season (length = number of rounds). */
+  function getBoxMatchupsForYear(team, year) {
+    const staticList = getStaticBoxScheduleRowsForYear(team, year);
+    if (yearUsesExplicitBoxList(seasonBoxYear(year)) && staticList.length > 0) {
+      return staticList.map((r) => ({ matchup: r.matchup, dates: r.dates }));
+    }
+    return FULL_BOX_MATCHUPS;
+  }
+
   const boxScheduleMergeCache = new Map();
 
   function buildMergedBoxScheduleRowList(team, year, apiRows) {
@@ -439,7 +558,8 @@
     (apiRows || []).forEach((r) => {
       byWeek.set(Number(r.week), r);
     });
-    return FULL_BOX_MATCHUPS.map((m, idx) => {
+    const matchups = getBoxMatchupsForYear(team, year);
+    return matchups.map((m, idx) => {
       const week = idx + 1;
       const db = byWeek.get(week);
       const staticRec = staticByMatchup[m.matchup];
@@ -500,6 +620,7 @@
     });
     const players = getBoxPlayersForYear(team, year);
     return ["A", "B", "C", "D", "E", "F"]
+      .filter((letter) => players && players[letter])
       .map((letter) => ({
         letter,
         name: (players && players[letter]) || "",
@@ -508,14 +629,14 @@
       .sort((a, b) => b.total - a.total);
   }
 
-  // Build full 15 rows for a box, merging canonical matchups with recorded scores.
+  // Build schedule rows for a box, merging canonical matchups with recorded scores.
   function getFullBoxRows(team, year) {
     const scheduleRows = getBoxScheduleRowsForYear(team, year);
     const recorded = scheduleRows.reduce((acc, r) => {
       acc[r.matchup] = r;
       return acc;
     }, {});
-    return FULL_BOX_MATCHUPS.map((m) => {
+    return getBoxMatchupsForYear(team, year).map((m) => {
       const r = recorded[m.matchup];
       const team1 = r ? r.team1 : "";
       const team2 = r ? r.team2 : "";
@@ -614,11 +735,12 @@
       const form = document.getElementById("score-form");
       const box = form && form.level ? form.level.value : "";
       const year = getYearFrom("year-input");
+      const matchups = getBoxMatchupsForYear(box, year);
       const rec = getBoxScheduleRowsForYear(box, year).reduce((acc, row) => {
         acc[row.matchup] = row;
         return acc;
       }, {});
-      FULL_BOX_MATCHUPS.forEach((m, idx) => {
+      matchups.forEach((m, idx) => {
         const row = rec[m.matchup];
         const dateLabel = row && row.dates ? row.dates : m.dates;
         addOpt(String(idx + 1), `${idx + 1} — ${dateLabel}`);
@@ -667,14 +789,15 @@
     if (!form) return;
     if (form.league.value !== "box") return;
     const weekNum = parseInt(form.week.value, 10);
-    const matchup = Number.isNaN(weekNum) ? null : FULL_BOX_MATCHUPS[weekNum - 1];
     const box = form.level.value;
+    const year = getYearFrom("year-input");
+    const matchups = getBoxMatchupsForYear(box, year);
+    const matchup = Number.isNaN(weekNum) ? null : matchups[weekNum - 1];
     if (!matchup || !box) {
       clearScoreFormPlayers();
       return;
     }
     const parsed = parseMatchup(matchup.matchup);
-    const year = getYearFrom("year-input");
     const p1 = getBoxPlayersForYear(box, year);
     const p2 = getBoxPlayersForYear(box, year);
     fillSingleTeamSideOptions(`${parsed.team1[0]} & ${parsed.team1[1]}`, `${parsed.team2[0]} & ${parsed.team2[1]}`);
@@ -857,7 +980,7 @@
 
   function fillYearOptions(years) {
     if (!Array.isArray(years) || years.length === 0) return;
-    const defaultYear = years.includes(2025) ? 2025 : Math.max.apply(null, years);
+    const defaultYear = Math.max.apply(null, years);
     const label = (y) => `${y}-${y + 1}`;
 
     YEAR_SELECT_IDS.forEach((id) => {
@@ -1118,7 +1241,7 @@
       headerCells.forEach((th) => {
         const letter = th.dataset.letter;
         const name = players[letter] || "";
-        th.textContent = `${letter}=${name}`;
+        th.textContent = name ? `${letter}=${name}` : letter || "";
       });
     }
 
@@ -1127,12 +1250,16 @@
     const playerTotals = { A: 0, B: 0, C: 0, D: 0, E: 0, F: 0 };
     rows.forEach((row) => {
       const tr = document.createElement("tr");
-      const a = escapeHtml(String(row.a ?? ""));
-      const b = escapeHtml(String(row.b ?? ""));
-      const c = escapeHtml(String(row.c ?? ""));
-      const d = escapeHtml(String(row.d ?? ""));
-      const e = escapeHtml(String(row.e ?? ""));
-      const f = escapeHtml(String(row.f ?? ""));
+      const cellScore = (letter, val) => {
+        if (players && !players[letter]) return "";
+        return escapeHtml(String(val ?? ""));
+      };
+      const a = cellScore("A", row.a);
+      const b = cellScore("B", row.b);
+      const c = cellScore("C", row.c);
+      const d = cellScore("D", row.d);
+      const e = cellScore("E", row.e);
+      const f = cellScore("F", row.f);
       const sides = getMatchupPlayerNamesBySide(team, row.matchup, year);
       tr.innerHTML = `
         <td>${escapeHtml(row.matchup)}</td>
@@ -1151,8 +1278,9 @@
       tbody.appendChild(tr);
       total1 += Number(row.team1) || 0;
       total2 += Number(row.team2) || 0;
-      ["a", "b", "c", "d", "e", "f"].forEach((key, i) => {
+      ["a", "b", "c", "d", "e", "f"].forEach((key) => {
         const letter = key.toUpperCase();
+        if (players && !players[letter]) return;
         const val = row[key];
         if (val !== "X" && val !== "" && val != null) {
           playerTotals[letter] += Number(val) || 0;
@@ -1160,6 +1288,8 @@
       });
     });
 
+    const totalCell = (letter) =>
+      players && players[letter] ? `<strong>${playerTotals[letter]}</strong>` : "";
     const trTotal = document.createElement("tr");
     trTotal.className = "box-totals-row";
     trTotal.innerHTML = `
@@ -1169,12 +1299,12 @@
       <td><strong>${total2}</strong></td>
       <td></td>
       <td></td>
-      <td><strong>${playerTotals.A}</strong></td>
-      <td><strong>${playerTotals.B}</strong></td>
-      <td><strong>${playerTotals.C}</strong></td>
-      <td><strong>${playerTotals.D}</strong></td>
-      <td><strong>${playerTotals.E}</strong></td>
-      <td><strong>${playerTotals.F}</strong></td>
+      <td>${totalCell("A")}</td>
+      <td>${totalCell("B")}</td>
+      <td>${totalCell("C")}</td>
+      <td>${totalCell("D")}</td>
+      <td>${totalCell("E")}</td>
+      <td>${totalCell("F")}</td>
     `;
     tbody.appendChild(trTotal);
   }

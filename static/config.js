@@ -1,5 +1,5 @@
 // Set this when hosting the UI on GitHub Pages. If not set, the app will throw when
-// loading Schedule/Standings/Input and dropdown selections may seem to do nothing.
+// loading Schedule/Standings/Enter and dropdown selections may seem to do nothing.
 // When opened from localhost or from the Render app itself, use same origin so API requests work.
 (function () {
   if (typeof window === "undefined") return;

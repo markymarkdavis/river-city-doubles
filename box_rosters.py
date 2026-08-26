@@ -87,108 +87,84 @@ BOX_PLAYERS: dict[str, dict[str, str]] = {
 # Years with explicit per-box overrides only (no fallback to BOX_PLAYERS for missing teams).
 BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
     2026: {
-        "Foo Fighters": {
-            "A": "Mark Davis",
-            "B": "Jim Davis",
-            "C": "Sanjay Hinduja",
-            "D": "Grant Stevens",
-            "E": "Andy Mack",
+        "Phish": {
+            "A": "Patrick Chifunda",
+            "B": "Mark Davis",
+            "C": "Josh Wishnack",
+            "D": "Scott Harrison",
+            "E": "Rene Valdes",
+        },
+        "Grateful Dead": {
+            "A": "John Street",
+            "B": "Robert Angle",
+            "C": "George Stephenson",
+            "D": "Michael Jarvis",
+            "E": "Rand Robins",
             "F": "Eddie O'Leary",
+        },
+        "Widespread Panic": {
+            "A": "Manoli Loupassi",
+            "B": "Michael Halloran",
+            "C": "Andy Mack",
+            "D": "Jimmy Meadows",
+            "E": "Kijoon Kim",
+            "F": "Jon Rasich",
+        },
+        "String Cheese Incident": {
+            "A": "Charles Kempe",
+            "B": "Ros Bowers",
+            "C": "Jeff Clarke",
+            "D": "Jim Davis",
+            "E": "Peter Thacker",
+            "F": "Shelton Horsley",
+        },
+        "Goose": {
+            "A": "Monty Geho",
+            "B": "Sanjay Hinduja",
+            "C": "David Shepardson",
+            "D": "Tommy Richards",
+            "E": "John Patton Jr",
+            "F": "Berkeley Edmunds",
+        },
+        "Umphrey's McGee": {
+            "A": "Feizel Bobert",
+            "B": "Tom Mitchell",
+            "C": "Rick Morris",
+            "D": "Matt Chriss",
+            "E": "Jimmy Cooke",
+            "F": "Mukul Paithane",
+        },
+        "Disco Biscuits": {
+            "A": "Dean King",
+            "B": "Spencer Williamson",
+            "C": "Frank de Venoge",
+            "D": "Teddy Damgard",
+            "E": "Alan Burke",
+            "F": "Jack Hager",
+        },
+        "Lettuce": {
+            "A": "Robert Gentil",
+            "B": "Bob Reynolds",
+            "C": "Skylyr Philips",
+            "D": "Heidi Stevenson",
+            "E": "Nick Farrell",
+            "F": "Clark Warthen",
+        },
+        "Lotus": {
+            "A": "Andrew Fois",
+            "B": "John Farmer",
+            "C": "Chris Dickey",
+            "D": "Gabe Hakim",
+            "E": "Deesh Bhattal",
+            "F": "Robert Huff",
         },
     },
 }
 
-# Dates strings per week index (week 1 = first row). Mirrors static/app.js BOX_SCHEDULES `dates`.
-BOX_SCHEDULE_DATES: dict[str, list[str]] = {
-    "Foo Fighters": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Jan 11–17",
-    ],
-    "Pink Floyd": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Jan 11–17",
-        "Jan 25–31",
-        "Feb 15–21",
-    ],
-    "Dire Straits": [
-        "Nov 2–8",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 28–Jan 3",
-        "Jan 25–31",
-    ],
-    "Metallica": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Dec 28–Jan 3",
-        "Jan 4–10",
-        "Jan 11–17",
-        "Jan 25–31",
-        "Feb 1–7",
-    ],
-    "Nirvana": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Jan 11–17",
-        "Feb 1–7",
-    ],
-    "Fleetwood Mac": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Dec 28–Jan 3",
-        "Jan 4–10",
-        "Jan 11–17",
-        "Jan 18–24",
-        "Jan 25–31",
-        "Feb 1–7",
-        "Feb 8–14",
-        "Feb 15–21",
-    ],
-    "Guns N' Roses": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Jan 11–17",
-        "Jan 18–24",
-    ],
-    "Pearl Jam": [
-        "Nov 2–8",
-        "Nov 9–15",
-    ],
-    "Deep Purple": [
-        "Nov 2–8",
-        "Nov 9–15",
-        "Nov 16–29",
-        "Nov 30–Dec 6",
-        "Dec 7–13",
-        "Dec 14–27",
-        "Jan 18–24",
-    ],
-}
+# Canonical 15-week box season (must match static/app.js FULL_BOX_MATCHUPS length).
+BOX_WEEK_COUNT = 15
 
-# Same order as static/app.js FULL_BOX_MATCHUPS — extends short team tabs to week N.
+# Same order as static/app.js FULL_BOX_MATCHUPS — one date label per week for every box.
 FULL_BOX_MATCHUP_DATES: list[str] = [
     "Nov 2–8",
     "Nov 9–15",
@@ -226,19 +202,66 @@ FULL_BOX_MATCHUPS: list[str] = [
     "C & E vs D & F",
 ]
 
+# 2026–2027: biweekly windows starting Aug 30 (6-player: 9 rounds; 5-player: 10).
+_BOX_DATES_6_2026 = [
+    "Aug 30–Sep 12",
+    "Sep 13–Sep 26",
+    "Sep 27–Oct 10",
+    "Oct 11–Oct 24",
+    "Oct 25–Nov 7",
+    "Nov 8–Nov 21",
+    "Nov 22–Dec 5",
+    "self scheduled match",
+    "self scheduled match",
+]
+_BOX_DATES_5_2026 = _BOX_DATES_6_2026 + ["self scheduled match"]
+
+_BOX_MATCHUPS_6_2026 = [
+    "A & D vs B & C",
+    "A & F vs D & E",
+    "B & D vs C & F",
+    "A & B vs C & E",
+    "B & D vs E & F",
+    "A & C vs D & F",
+    "A & E vs B & F",
+    "B & E vs C & D",
+    "A & E vs C & F",
+]
+_BOX_MATCHUPS_5_2026 = [
+    "A & D vs C & E",
+    "A & B vs C & D",
+    "B & C vs D & E",
+    "A & B vs D & E",
+    "A & C vs B & E",
+    "A & E vs C & D",
+    "A & C vs B & D",
+    "B & D vs C & E",
+    "A & D vs B & E",
+    "A & E vs B & C",
+]
+
+_JAM_BAND_6_2026 = [
+    "Grateful Dead",
+    "Widespread Panic",
+    "String Cheese Incident",
+    "Goose",
+    "Umphrey's McGee",
+    "Disco Biscuits",
+    "Lettuce",
+    "Lotus",
+]
+
 BOX_SCHEDULE_DATES_BY_YEAR: dict[int, dict[str, list[str]]] = {
     2026: {
-        "Foo Fighters": [
-            "May 12, 2026",
-            "May 13, 2026",
-            "May 14, 2026",
-            "May 15, 2026",
-            "May 16, 2026",
-            "May 17, 2026",
-            "May 18, 2026",
-            "May 19, 2026",
-            "May 20, 2026",
-        ],
+        "Phish": list(_BOX_DATES_5_2026),
+        **{name: list(_BOX_DATES_6_2026) for name in _JAM_BAND_6_2026},
+    },
+}
+
+BOX_MATCHUPS_BY_YEAR: dict[int, dict[str, list[str]]] = {
+    2026: {
+        "Phish": list(_BOX_MATCHUPS_5_2026),
+        **{name: list(_BOX_MATCHUPS_6_2026) for name in _JAM_BAND_6_2026},
     },
 }
 
@@ -333,16 +356,22 @@ def get_box_week_dates_label(team: str, week: int, season_year: int) -> str | No
         return None
     y = int(season_year)
     ys = BOX_SCHEDULE_DATES_BY_YEAR.get(y, {}).get(team)
-    if ys:
+    if ys is not None:
         return ys[week - 1] if week <= len(ys) else None
     if y in BOX_PLAYERS_BY_YEAR:
         return None
-    legacy = BOX_SCHEDULE_DATES.get(team)
-    if legacy and week <= len(legacy):
-        return legacy[week - 1]
     if week <= len(FULL_BOX_MATCHUP_DATES):
         return FULL_BOX_MATCHUP_DATES[week - 1]
     return None
+
+
+def get_box_matchups(team: str, year: int) -> list[str]:
+    """Matchup strings for this box/season (mirrors static/app.js getBoxMatchupsForYear)."""
+    y = int(year)
+    by_year = BOX_MATCHUPS_BY_YEAR.get(y, {}).get(team)
+    if by_year:
+        return list(by_year)
+    return list(FULL_BOX_MATCHUPS)
 
 
 def box_week_calendar_contains_date(team: str, week: int, season_year: int, on_date: date) -> bool:

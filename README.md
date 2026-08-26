@@ -203,7 +203,7 @@ Then open [http://localhost:5000](http://localhost:5000). The Flask app serves t
 ## Features
 
 - **Home** — Short description of the league (box vs handicap).
-- **Input Score** — Submit a match: league (box/handicap), level (open/main), week, optional handicap, both team names, and games won (best of 5). Submitting sends you to Rankings.
+- **Enter Score** — Submit a match: league (box/handicap), level (open/main), week, optional handicap, both team names, and games won (best of 5). Submitting sends you to Rankings.
 - **Rankings** — Handicap Open and Handicap Main. Points: 1 for playing, 1 for winning the match, 1 per game won. Data is stored in SQLite.
 
 ## API

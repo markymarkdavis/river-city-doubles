@@ -29,10 +29,12 @@ from flask_cors import CORS
 from werkzeug.exceptions import HTTPException
 
 from box_rosters import (
-    FULL_BOX_MATCHUPS,
+    BOX_PLAYERS,
+    BOX_PLAYERS_BY_YEAR,
     box_week_date_bounds,
     box_week_deadline_date,
     box_week_start_date,
+    get_box_matchups,
     get_box_roster_dict,
     get_box_week_dates_label,
 )
@@ -89,19 +91,9 @@ TEAMS_MAIN = [
 # Exclude from team lists (e.g. test placeholders)
 TEAMS_EXCLUDED = {"A", "B"}
 
-# Box league tab names (must match static/app.js BOX_PLAYERS keys).
-BOX_TEAM_NAMES = frozenset(
-    {
-        "Foo Fighters",
-        "Pink Floyd",
-        "Dire Straits",
-        "Metallica",
-        "Nirvana",
-        "Fleetwood Mac",
-        "Guns N' Roses",
-        "Pearl Jam",
-        "Deep Purple",
-    }
+# Box league tab names (must match static/app.js BOX_PLAYERS + year overrides).
+BOX_TEAM_NAMES = frozenset(BOX_PLAYERS) | frozenset(
+    team for year_map in BOX_PLAYERS_BY_YEAR.values() for team in year_map
 )
 
 # Open division: team name -> list of player names for that team
@@ -805,9 +797,10 @@ def _side_label_to_two_letters(label: str) -> frozenset[str] | None:
 
 def box_week_matchup_player_names(box_team: str, week: int, year: int) -> tuple[str, list[str], list[str]]:
     """(matchup label, side1 display names, side2 display names) for this box week."""
-    if week < 1 or week > len(FULL_BOX_MATCHUPS):
+    matchups = get_box_matchups(box_team, year)
+    if week < 1 or week > len(matchups):
         return "", [], []
-    matchup = FULL_BOX_MATCHUPS[week - 1]
+    matchup = matchups[week - 1]
     roster = get_box_roster_dict(box_team, year)
     letters1, letters2 = _parse_box_matchup_sides(matchup)
     if len(letters1) != 2 or len(letters2) != 2:
@@ -822,7 +815,8 @@ def box_week_matchup_player_names(box_team: str, week: int, year: int) -> tuple[
 def compute_box_player_standings_rows(box_team: str, year: int) -> list[dict]:
     """Season-to-date games won per letter/player for one box; mirrors static/app.js getBoxPlayerTotals."""
     roster = get_box_roster_dict(box_team, year)
-    totals = {L: 0 for L in "ABCDEF"}
+    letters = [L for L in "ABCDEF" if (roster.get(L) or "").strip()]
+    totals = {L: 0 for L in letters}
     with get_db() as conn:
         rows = conn.execute(
             """SELECT week, team1, team2, games1, games2 FROM scores
@@ -831,7 +825,7 @@ def compute_box_player_standings_rows(box_team: str, year: int) -> list[dict]:
         ).fetchall()
     by_week = {int(r["week"]): r for r in rows}
 
-    for idx, matchup in enumerate(FULL_BOX_MATCHUPS):
+    for idx, matchup in enumerate(get_box_matchups(box_team, year)):
         week_num = idx + 1
         r = by_week.get(week_num)
         if not r:
@@ -856,11 +850,13 @@ def compute_box_player_standings_rows(box_team: str, year: int) -> list[dict]:
         else:
             continue
         for L in side1:
-            totals[L] += gs1
+            if L in totals:
+                totals[L] += gs1
         for L in side2:
-            totals[L] += gs2
+            if L in totals:
+                totals[L] += gs2
 
-    out = [{"letter": L, "name": (roster.get(L) or "").strip(), "total": totals[L]} for L in "ABCDEF"]
+    out = [{"letter": L, "name": (roster.get(L) or "").strip(), "total": totals[L]} for L in letters]
     out.sort(key=lambda x: (-x["total"], x["letter"]))
     return out
 
@@ -1165,10 +1161,9 @@ def sweep_box_match_reminders_for_season_years(now_et: datetime) -> int:
     allowed = set(SEASON_YEARS) if SEASON_YEARS else {DEFAULT_SEASON_YEAR}
     init_db()
     total = 0
-    max_week = len(FULL_BOX_MATCHUPS)
     for y in allowed:
         for box_team in sorted(BOX_TEAM_NAMES):
-            for week in range(1, max_week + 1):
+            for week in range(1, len(get_box_matchups(box_team, y)) + 1):
                 if get_box_week_dates_label(box_team, week, y) is None:
                     continue
                 try:
@@ -1650,7 +1645,7 @@ def get_team_players(level):
 
 @app.route("/api/weeks")
 def get_weeks():
-    """Week number and date range for the Input Score form."""
+    """Week number and date range for the Enter Score form."""
     return jsonify([{"week": w, "date_range": WEEK_DATE_RANGES[w]} for w in sorted(WEEK_DATE_RANGES)])
 
 
