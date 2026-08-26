@@ -434,7 +434,7 @@
       A: "Andrew Fois",
       B: "John Farmer",
       C: "Chris Dickey",
-      D: "Gabe Hakim",
+      D: "Gaby Hakim",
       E: "Deesh Bhattal",
       F: "Robert Huff",
     },
@@ -1405,15 +1405,6 @@
     await renderBoxStandings();
   }
 
-  function splitSchedulePlayerCell(value) {
-    if (!value || !String(value).trim()) return [];
-    const cleaned = String(value).replace(/\//g, ",").replace(/&/g, ",").replace(/\s+and\s+/gi, ",");
-    return cleaned
-      .split(",")
-      .map((p) => p.trim().replace(/\s+/g, " "))
-      .filter(Boolean);
-  }
-
   function firstNameSortKey(displayName) {
     const parts = String(displayName || "").trim().split(/\s+/);
     return (parts[0] || "").toLowerCase();
@@ -1423,8 +1414,12 @@
   const PLAYER_NAME_CANONICAL = new Map([
     ["dave shepardson", "David Shepardson"],
     ["frank devenoge", "Frank De Venoge"],
+    ["frank de venoge", "Frank de Venoge"],
+    ["gabe hakim", "Gaby Hakim"],
     ["skye phillips", "Skylyr Phillips"],
     ["skye philips", "Skylyr Phillips"],
+    ["skylyr philips", "Skylyr Phillips"],
+    ["john patton jr", "John Patton"],
   ]);
 
   function canonicalPlayerName(raw) {
@@ -1494,79 +1489,24 @@
     ["jack hager", "jvhager@gmail.com"],
     ["mukul paithane", "mukul.paithane@etelic.com"],
     ["mark davis", "md8294@gmail.com"],
+    ["feizel bobert", "FeizelBob@hotmail.com"],
+    ["patrick chifunda", "patrick.chifunda@theccv.org"],
+    ["chris dickey", "chris.s.dickey@gmail.com"],
+    ["john farmer", "jfarmer@leadingedgelaw.com"],
+    ["andrew fois", "andrew.fois@hotmail.com"],
+    ["gaby hakim", "gabriel_23225@yahoo.com"],
+    ["robert huff", "robertmhuffii@gmail.com"],
+    ["kijoon kim", "rkkim2004@gmail.com"],
+    ["dean king", "deanhking@mac.com"],
+    ["rene valdes", "renecalderin@yahoo.com"],
+    ["frank de venoge", "fxdevenoge@yahoo.com"],
+    ["clark warthen", "clark.warthen@gmail.com"],
   ]);
 
   function lookupPlayerContactEmail(displayName) {
     const canon = canonicalPlayerName(displayName);
     const k = canon.trim().toLowerCase();
     return PLAYER_CONTACT_EMAILS.get(k) || "";
-  }
-
-  /**
-   * Handicap division + schedule team for the Players tab. For these names, schedule
-   * rows are ignored so each person shows exactly one division/team (keys: lowercase display name).
-   */
-  const PLAYER_HANDICAP_CANONICAL_ROSTER = new Map([
-    [
-      2025,
-      new Map([
-        ["alan burke", { division: "Main", team: "The Boast Beasts" }],
-        ["bt thornton", { division: "Main", team: "Drop Shotz" }],
-        ["grant stevens", { division: "Open", team: "Fatty and Friends" }],
-        ["michael halloran", { division: "Open", team: "Mack Attack" }],
-        ["teddy damgard", { division: "Open", team: "Team Nitro" }],
-        ["dean king", { division: "Open", team: "Team Nitro" }],
-        ["nitin sethi", { division: "Main", team: "The Boast Beasts" }],
-        ["spencer williamson", { division: "Open", team: "Even Older and Grumpier" }],
-      ]),
-    ],
-    [
-      2026,
-      new Map([
-        ["alan burke", { division: "Main", team: "The Boast Beasts" }],
-        ["bt thornton", { division: "Main", team: "Drop Shotz" }],
-        ["grant stevens", { division: "Open", team: "Fatty and Friends" }],
-        ["michael halloran", { division: "Open", team: "Mack Attack" }],
-        ["teddy damgard", { division: "Open", team: "Team Nitro" }],
-        ["dean king", { division: "Open", team: "Team Nitro" }],
-        ["nitin sethi", { division: "Main", team: "The Boast Beasts" }],
-        ["spencer williamson", { division: "Open", team: "Even Older and Grumpier" }],
-      ]),
-    ],
-  ]);
-
-  function sortedHandicapPairParts(hcPairs) {
-    if (!hcPairs || hcPairs.size === 0) return [];
-    const divRank = (d) => (d === "Open" ? 0 : d === "Main" ? 1 : 2);
-    const parsed = [...hcPairs].map((s) => {
-      const i = s.indexOf("\0");
-      const lev = i >= 0 ? s.slice(0, i) : s;
-      const team = i >= 0 ? s.slice(i + 1) : "—";
-      return { lev: lev || "", team: team || "—" };
-    });
-    parsed.sort((a, b) => {
-      const rd = divRank(a.lev) - divRank(b.lev);
-      return rd !== 0 ? rd : a.team.localeCompare(b.team);
-    });
-    return parsed;
-  }
-
-  function formatHandicapDivisionColumn(parts) {
-    if (!parts.length) return "N/A";
-    return parts.map((p) => p.lev).join("; ");
-  }
-
-  function formatHandicapTeamColumn(parts) {
-    if (!parts.length) return "N/A";
-    return parts.map((p) => p.team).join("; ");
-  }
-
-  async function fetchHandicapScheduleRowsForPlayers(level, year) {
-    const url = `${apiUrl("/api/schedule")}?level=${encodeURIComponent(level)}&year=${year}`;
-    const res = await fetchWithTimeout(url).catch(() => null);
-    if (!res || !res.ok) return [];
-    const data = await res.json().catch(() => []);
-    return Array.isArray(data) ? data : [];
   }
 
   async function buildPlayersDirectoryRows(year) {
@@ -1577,7 +1517,7 @@
       if (!disp) return null;
       const key = disp.toLowerCase();
       if (!byKey.has(key)) {
-        byKey.set(key, { displayName: disp, boxes: new Set(), hcPairs: new Set() });
+        byKey.set(key, { displayName: disp, boxes: new Set() });
       }
       return byKey.get(key);
     }
@@ -1589,41 +1529,14 @@
         if (row) row.boxes.add(team);
       });
     }
-    for (const level of ["open", "main"]) {
-      const divLabel = level === "open" ? "Open" : "Main";
-      const rows = await fetchHandicapScheduleRowsForPlayers(level, y);
-      rows.forEach((r) => {
-        const t1 = (r.team1 || "").trim() || "—";
-        const t2 = (r.team2 || "").trim() || "—";
-        splitSchedulePlayerCell(r.team1_players).forEach((n) => {
-          const row = ensure(n);
-          if (row) row.hcPairs.add(`${divLabel}\0${t1}`);
-        });
-        splitSchedulePlayerCell(r.team2_players).forEach((n) => {
-          const row = ensure(n);
-          if (row) row.hcPairs.add(`${divLabel}\0${t2}`);
-        });
-      });
-    }
-    const rosterFix = PLAYER_HANDICAP_CANONICAL_ROSTER.get(y);
-    if (rosterFix) {
-      for (const row of byKey.values()) {
-        const fix = rosterFix.get(row.displayName.toLowerCase());
-        if (fix) {
-          row.hcPairs.clear();
-          row.hcPairs.add(`${fix.division}\0${fix.team}`);
-        }
-      }
-    }
     const out = [...byKey.values()].map((r) => {
-      const hcParts = sortedHandicapPairParts(r.hcPairs);
       const email = lookupPlayerContactEmail(r.displayName);
       return {
         name: r.displayName,
         email,
         box: [...r.boxes].sort((a, b) => a.localeCompare(b)).join(", ") || "—",
-        handicapDivision: formatHandicapDivisionColumn(hcParts),
-        handicapTeam: formatHandicapTeamColumn(hcParts),
+        handicapDivision: null,
+        handicapTeam: null,
         fn: firstNameSortKey(r.displayName),
         fn2: r.displayName.toLowerCase(),
       };
@@ -1653,7 +1566,9 @@
         const emailCell =
           row.email &&
           `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`;
-        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${emailCell || "—"}</td><td>${escapeHtml(row.box)}</td><td>${escapeHtml(row.handicapDivision)}</td><td>${escapeHtml(row.handicapTeam)}</td>`;
+        const hcDiv = row.handicapDivision != null ? escapeHtml(row.handicapDivision) : "—";
+        const hcTeam = row.handicapTeam != null ? escapeHtml(row.handicapTeam) : "—";
+        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${emailCell || "—"}</td><td>${escapeHtml(row.box)}</td><td>${hcDiv}</td><td>${hcTeam}</td>`;
         tbody.appendChild(tr);
       });
     } catch (err) {

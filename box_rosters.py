@@ -154,7 +154,7 @@ BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
             "A": "Andrew Fois",
             "B": "John Farmer",
             "C": "Chris Dickey",
-            "D": "Gabe Hakim",
+            "D": "Gaby Hakim",
             "E": "Deesh Bhattal",
             "F": "Robert Huff",
         },
