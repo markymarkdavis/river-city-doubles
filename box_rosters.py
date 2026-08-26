@@ -142,7 +142,7 @@ BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
             "E": "Alan Burke",
             "F": "Jack Hager",
         },
-        "Lettuce": {
+        "Twiddle": {
             "A": "Robert Gentil",
             "B": "Bob Reynolds",
             "C": "Skylyr Philips",
@@ -247,7 +247,7 @@ _JAM_BAND_6_2026 = [
     "Goose",
     "Umphrey's McGee",
     "Disco Biscuits",
-    "Lettuce",
+    "Twiddle",
     "Lotus",
 ]
 

@@ -422,7 +422,7 @@
       E: "Alan Burke",
       F: "Jack Hager",
     },
-    Lettuce: {
+    Twiddle: {
       A: "Robert Gentil",
       B: "Bob Reynolds",
       C: "Skylyr Philips",
@@ -448,7 +448,7 @@
     Goose: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     "Umphrey's McGee": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     "Disco Biscuits": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
-    Lettuce: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
+    Twiddle: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     Lotus: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
   };
 
