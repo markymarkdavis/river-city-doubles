@@ -804,13 +804,13 @@ body {
 }
 
 #panel-players .standings-table tbody td:nth-child(2) {
-  word-break: break-word;
-  max-width: 16rem;
+  white-space: nowrap;
   font-size: 0.875rem;
 }
 
 #panel-players .standings-table tbody td:nth-child(2) a {
   color: var(--accent);
+  white-space: nowrap;
 }
 
 .schedule-tabs {
