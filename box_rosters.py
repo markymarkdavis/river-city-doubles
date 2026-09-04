@@ -93,6 +93,7 @@ BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
             "C": "Josh Wishnack",
             "D": "Scott Harrison",
             "E": "Rene Valdes",
+            "F": "Graham Lanutti",
         },
         "Grateful Dead": {
             "A": "John Street",
@@ -202,7 +203,7 @@ FULL_BOX_MATCHUPS: list[str] = [
     "C & E vs D & F",
 ]
 
-# 2026–2027: biweekly windows starting Aug 30 (6-player: 9 rounds; 5-player: 10).
+# 2026–2027: biweekly windows starting Aug 30 (9 rounds; last two self-scheduled).
 _BOX_DATES_6_2026 = [
     "Aug 30–Sep 12",
     "Sep 13–Sep 26",
@@ -214,7 +215,6 @@ _BOX_DATES_6_2026 = [
     "self scheduled match",
     "self scheduled match",
 ]
-_BOX_DATES_5_2026 = _BOX_DATES_6_2026 + ["self scheduled match"]
 
 _BOX_MATCHUPS_6_2026 = [
     "A & D vs B & C",
@@ -227,20 +227,9 @@ _BOX_MATCHUPS_6_2026 = [
     "B & E vs C & D",
     "A & E vs C & F",
 ]
-_BOX_MATCHUPS_5_2026 = [
-    "A & D vs C & E",
-    "A & B vs C & D",
-    "B & C vs D & E",
-    "A & B vs D & E",
-    "A & C vs B & E",
-    "A & E vs C & D",
-    "A & C vs B & D",
-    "B & D vs C & E",
-    "A & D vs B & E",
-    "A & E vs B & C",
-]
 
 _JAM_BAND_6_2026 = [
+    "Phish",
     "Grateful Dead",
     "Widespread Panic",
     "String Cheese Incident",
@@ -252,17 +241,11 @@ _JAM_BAND_6_2026 = [
 ]
 
 BOX_SCHEDULE_DATES_BY_YEAR: dict[int, dict[str, list[str]]] = {
-    2026: {
-        "Phish": list(_BOX_DATES_5_2026),
-        **{name: list(_BOX_DATES_6_2026) for name in _JAM_BAND_6_2026},
-    },
+    2026: {name: list(_BOX_DATES_6_2026) for name in _JAM_BAND_6_2026},
 }
 
 BOX_MATCHUPS_BY_YEAR: dict[int, dict[str, list[str]]] = {
-    2026: {
-        "Phish": list(_BOX_MATCHUPS_5_2026),
-        **{name: list(_BOX_MATCHUPS_6_2026) for name in _JAM_BAND_6_2026},
-    },
+    2026: {name: list(_BOX_MATCHUPS_6_2026) for name in _JAM_BAND_6_2026},
 }
 
 _MONTH_ABBR_BOX = {

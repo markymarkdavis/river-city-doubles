@@ -318,7 +318,7 @@
     ],
   };
 
-  // 2026–2027 season: jam-band boxes (1×5-player, 8×6-player).
+  // 2026–2027 season: jam-band boxes (all 6-player).
   // Matchups maximize partner shuffle and avoid consecutive sit-outs.
   const BOX_DATES_6_2026 = [
     "Aug 30–Sep 12",
@@ -331,7 +331,6 @@
     "self scheduled match",
     "self scheduled match",
   ];
-  const BOX_DATES_5_2026 = BOX_DATES_6_2026.concat(["self scheduled match"]);
 
   const BOX_MATCHUPS_6_2026 = [
     "A & D vs B & C",
@@ -343,18 +342,6 @@
     "A & E vs B & F",
     "B & E vs C & D",
     "A & E vs C & F",
-  ];
-  const BOX_MATCHUPS_5_2026 = [
-    "A & D vs C & E",
-    "A & B vs C & D",
-    "B & C vs D & E",
-    "A & B vs D & E",
-    "A & C vs B & E",
-    "A & E vs C & D",
-    "A & C vs B & D",
-    "B & D vs C & E",
-    "A & D vs B & E",
-    "A & E vs B & C",
   ];
 
   function buildBoxScheduleRows(matchups, dates) {
@@ -373,6 +360,7 @@
       C: "Josh Wishnack",
       D: "Scott Harrison",
       E: "Rene Valdes",
+      F: "Graham Lanutti",
     },
     "Grateful Dead": {
       A: "John Street",
@@ -441,7 +429,7 @@
   };
 
   const BOX_SCHEDULES_2026 = {
-    Phish: buildBoxScheduleRows(BOX_MATCHUPS_5_2026, BOX_DATES_5_2026),
+    Phish: buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     "Grateful Dead": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     "Widespread Panic": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
     "String Cheese Incident": buildBoxScheduleRows(BOX_MATCHUPS_6_2026, BOX_DATES_6_2026),
@@ -1416,10 +1404,13 @@
     ["frank devenoge", "Frank De Venoge"],
     ["frank de venoge", "Frank de Venoge"],
     ["gabe hakim", "Gaby Hakim"],
+    ["gabriel hakim", "Gaby Hakim"],
     ["skye phillips", "Skylyr Phillips"],
     ["skye philips", "Skylyr Phillips"],
     ["skylyr philips", "Skylyr Phillips"],
     ["john patton jr", "John Patton"],
+    ["moncure geho", "Monty Geho"],
+    ["shelton horseley", "Shelton Horsley"],
   ]);
 
   function canonicalPlayerName(raw) {
@@ -1429,84 +1420,161 @@
     return PLAYER_NAME_CANONICAL.get(k) || t;
   }
 
+  function formatPhoneDisplay(raw) {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (digits.length === 10) {
+      return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 11 && digits.startsWith("1")) {
+      return formatPhoneDisplay(digits.slice(1));
+    }
+    return String(raw || "").trim();
+  }
+
   /**
-   * Email from Doubles Box League contact sheet (Google Sheets roster tab).
+   * Email / phone from league contact list.
    * Keys: lowercase "First Last" matching canonicalPlayerName output / site rosters.
-   * @see https://docs.google.com/spreadsheets/d/1NO0RHEdLnpe-VxI7Kges6ZV0__HDBTFaStxT2aVZIYA/edit?gid=752038658
    */
   const PLAYER_CONTACT_EMAILS = new Map([
-    ["charles kempe", "charleskempe@gmail.com"],
-    ["jeff clarke", "clarke_j@bellsouth.net"],
-    ["spencer williamson", "tspencerwilliamson4@gmail.com"],
-    ["manoli loupassi", "manoli@loupassilaw.com"],
-    ["rand robins", "randrobins@gmail.com"],
-    ["teddy damgard", "tdamgard@gmail.com"],
-    ["andy mack", "Andymack33@gmail.com"],
-    ["skylyr phillips", "skyphil15@gmail.com"],
-    ["moses maxfield", "mosesmaxfield@gmail.com"],
-    ["berkeley edmunds", "Berkeley.edmunds@me.com"],
-    ["jim maxwell", "jim@maxwellassc.com"],
-    ["jimmy cooke", "cookelaw@yahoo.com"],
-    ["matt chriss", "mchriss23@gmail.com"],
-    ["bob reynolds", "robert.reynolds@comcast.net"],
-    ["ned sinnott", "nedsinnott@verizon.net"],
-    ["michael jarvis", "mjarvisjr@gmail.com"],
-    ["bt thornton", "btandc123@gmail.com"],
-    ["eddie o'leary", "eddie@teamcolab.com"],
-    ["grant stevens", "s.grantstevens@gmail.com"],
-    ["scott harrison", "Scott.Harrison@jll.com"],
-    ["nitin sethi", "sethin1@gmail.com"],
-    ["jim davis", "jdavis@richmond.edu"],
-    ["john street", "john.street@epitomenetworks.com"],
-    ["monty geho", "Mgeho@investdavenport.com"],
-    ["jon rasich", "jmrasich@gmail.com"],
     ["alan burke", "alanburkeaboutface@gmail.com"],
-    ["heidi stevenson", "heidik.stevenson@gmail.com"],
-    ["shelton horsley", "SHorsley@tswinvest.com"],
-    ["george stephenson", "georgeestephenson11@gmail.com"],
-    ["david shepardson", "dshepardson7@gmail.com"],
-    ["sanjay hinduja", "sanjay.s.hinduja@gmail.com"],
-    ["robert angle", "robert.angle13@gmail.com"],
-    ["jim bonbright", "jbonbright@lindencapital.net"],
-    ["rob long", "robertclong3@gmail.com"],
-    ["jimmy meadows", "Jcmeadow8189@gmail.com"],
-    ["trey packard", "tpackard@harriswilliams.com"],
-    ["josh wishnack", "josh@mulberryinvestments.com"],
-    ["ros bowers", "RBowers@brockenbroughinc.com"],
-    ["michael halloran", "michael@halloranhomesrva.com"],
-    ["peter thacker", "thackerpnj@gmail.com"],
-    ["matt rho", "matt.rho@gmail.com"],
-    ["deesh bhattal", "deeshbhattal@gmail.com"],
+    ["andrew fois", "andrew.fois@hotmail.com"],
+    ["andy mack", "Andymack33@gmail.com"],
+    ["berkeley edmunds", "Berkeley.edmunds@me.com"],
     ["billy miller", "millerw90@gmail.com"],
+    ["bob reynolds", "robert.reynolds@comcast.net"],
+    ["charles kempe", "charleskempe@gmail.com"],
+    ["chris dickey", "chris.s.dickey@gmail.com"],
+    ["clark warthen", "clark.warthen@gmail.com"],
+    ["david shepardson", "dshepardson7@gmail.com"],
+    ["dean king", "deanhking@mac.com"],
+    ["deesh bhattal", "deeshbhattal@gmail.com"],
+    ["eddie o'leary", "eddie@teamcolab.com"],
+    ["feizel bobert", "FeizelBob@hotmail.com"],
+    ["frank de venoge", "fxdevenoge@yahoo.com"],
+    ["george stephenson", "georgeestephenson11@gmail.com"],
+    ["gaby hakim", "gabriel_23225@yahoo.com"],
+    ["graham lanutti", "grahamlanuti@gmail.com"],
+    ["heidi stevenson", "heidik.stevenson@gmail.com"],
+    ["jack hager", "jvhager@gmail.com"],
+    ["jeff clarke", "clarke_j@bellsouth.net"],
+    ["jim davis", "jdavis@richmond.edu"],
+    ["jimmy cooke", "cookelaw@yahoo.com"],
+    ["jimmy meadows", "Jcmeadow8189@gmail.com"],
+    ["john farmer", "jfarmer@leadingedgelaw.com"],
+    ["john street", "john.street@epitomenetworks.com"],
+    ["john patton", "jspattonjr@gmail.com"],
+    ["jon rasich", "jmrasich@gmail.com"],
+    ["josh wishnack", "josh@mulberryinvestments.com"],
+    ["kijoon kim", "rkkim2004@gmail.com"],
+    ["manoli loupassi", "manoli@loupassilaw.com"],
+    ["mark davis", "md8294@gmail.com"],
+    ["matt chriss", "mchriss23@gmail.com"],
+    ["michael jarvis", "mjarvisjr@gmail.com"],
+    ["michael halloran", "michael@halloranhomesrva.com"],
+    ["monty geho", "Mgeho@investdavenport.com"],
+    ["mukul paithane", "mukul.paithane@etelic.com"],
     ["nick farrell", "nicholaspfarrell@gmail.com"],
+    ["peter thacker", "thackerpnj@gmail.com"],
+    ["rand robins", "randrobins@gmail.com"],
+    ["rene valdes", "renecalderin@yahoo.com"],
     ["rick morris", "rick@mulberryinvestments.com"],
+    ["robert angle", "robert.angle13@gmail.com"],
+    ["robert gentil", "robert.gentil@gmail.com"],
+    ["robert huff", "robertmhuffii@gmail.com"],
+    ["ros bowers", "RBowers@brockenbroughinc.com"],
+    ["sanjay hinduja", "sanjay.s.hinduja@gmail.com"],
+    ["scott harrison", "Scott.Harrison@jll.com"],
+    ["shelton horsley", "SHorsley@tswinvest.com"],
+    ["skylyr phillips", "skyphil15@gmail.com"],
+    ["spencer williamson", "tspencerwilliamson4@gmail.com"],
+    ["teddy damgard", "tdamgard@gmail.com"],
+    ["tom mitchell", "tmitch4charis@gmail.com"],
     ["tommy richards", "tommytennis56@hotmail.com"],
+    ["jim bonbright", "jbonbright@lindencapital.net"],
+    // Extra contacts still used on older seasons / sheets
+    ["moses maxfield", "mosesmaxfield@gmail.com"],
+    ["jim maxwell", "jim@maxwellassc.com"],
+    ["ned sinnott", "nedsinnott@verizon.net"],
+    ["bt thornton", "btandc123@gmail.com"],
+    ["grant stevens", "s.grantstevens@gmail.com"],
+    ["nitin sethi", "sethin1@gmail.com"],
+    ["rob long", "robertclong3@gmail.com"],
+    ["trey packard", "tpackard@harriswilliams.com"],
+    ["matt rho", "matt.rho@gmail.com"],
     ["austin brockenbough", "abiv@brockenbroughinc.com"],
     ["alan stone", "alan.stone74@gmail.com"],
-    ["robert gentil", "robert.gentil@gmail.com"],
-    ["tom mitchell", "tmitch4charis@gmail.com"],
-    ["john patton", "jspattonjr@gmail.com"],
-    ["jack hager", "jvhager@gmail.com"],
-    ["mukul paithane", "mukul.paithane@etelic.com"],
-    ["mark davis", "md8294@gmail.com"],
-    ["feizel bobert", "FeizelBob@hotmail.com"],
     ["patrick chifunda", "patrick.chifunda@theccv.org"],
-    ["chris dickey", "chris.s.dickey@gmail.com"],
-    ["john farmer", "jfarmer@leadingedgelaw.com"],
-    ["andrew fois", "andrew.fois@hotmail.com"],
-    ["gaby hakim", "gabriel_23225@yahoo.com"],
-    ["robert huff", "robertmhuffii@gmail.com"],
-    ["kijoon kim", "rkkim2004@gmail.com"],
-    ["dean king", "deanhking@mac.com"],
-    ["rene valdes", "renecalderin@yahoo.com"],
-    ["frank de venoge", "fxdevenoge@yahoo.com"],
-    ["clark warthen", "clark.warthen@gmail.com"],
+  ]);
+
+  const PLAYER_CONTACT_PHONES = new Map([
+    ["alan burke", "804-366-0436"],
+    ["andrew fois", "202-215-6811"],
+    ["andy mack", "804-402-9802"],
+    ["berkeley edmunds", "443-223-0385"],
+    ["billy miller", "804-347-4735"],
+    ["bob reynolds", "804-690-7986"],
+    ["charles kempe", "804-349-8635"],
+    ["chris dickey", "804-510-6856"],
+    ["clark warthen", "804-921-1969"],
+    ["david shepardson", "804-937-1786"],
+    ["dean king", "804-205-6693"],
+    ["deesh bhattal", "434-906-0318"],
+    ["eddie o'leary", "804-475-4502"],
+    ["feizel bobert", "804-245-7752"],
+    ["frank de venoge", "804-814-5607"],
+    ["george stephenson", "804-971-2731"],
+    ["gaby hakim", "540-316-7097"],
+    ["heidi stevenson", "804-517-7431"],
+    ["jack hager", "203-524-9469"],
+    ["jeff clarke", "904-868-3295"],
+    ["jim davis", "804-426-1971"],
+    ["jimmy cooke", "804-355-0013"],
+    ["jimmy meadows", "804-543-4819"],
+    ["john farmer", "804-363-4599"],
+    ["john street", "804-690-7702"],
+    ["john patton", "202-578-2123"],
+    ["jon rasich", "804-221-7815"],
+    ["josh wishnack", "804-240-6315"],
+    ["kijoon kim", "407-506-5211"],
+    ["manoli loupassi", "804-677-8241"],
+    ["mark davis", "804-873-5356"],
+    ["matt chriss", "410-736-3213"],
+    ["michael jarvis", "804-564-6075"],
+    ["michael halloran", "804-304-8716"],
+    ["monty geho", "804-241-9288"],
+    ["mukul paithane", "804-240-3395"],
+    ["nick farrell", "804-683-8082"],
+    ["peter thacker", "804-687-3308"],
+    ["rand robins", "804-938-6393"],
+    ["rene valdes", "804-986-1010"],
+    ["rick morris", "804-380-1123"],
+    ["robert angle", "804-304-0636"],
+    ["robert gentil", "804-356-3343"],
+    ["robert huff", "804-833-6763"],
+    ["ros bowers", "804-288-0404"],
+    ["sanjay hinduja", "804-314-9239"],
+    ["scott harrison", "804-647-1574"],
+    ["shelton horsley", "804-347-7837"],
+    ["skylyr phillips", "804-305-7793"],
+    ["spencer williamson", "804-833-2097"],
+    ["teddy damgard", "804-337-1691"],
+    ["tom mitchell", "804-539-5733"],
+    ["tommy richards", "804-397-0215"],
+    ["jim bonbright", "804-955-5199"],
+    ["graham lanutti", "516-717-7890"],
+    ["patrick chifunda", "443-739-9369"],
   ]);
 
   function lookupPlayerContactEmail(displayName) {
     const canon = canonicalPlayerName(displayName);
     const k = canon.trim().toLowerCase();
     return PLAYER_CONTACT_EMAILS.get(k) || "";
+  }
+
+  function lookupPlayerContactPhone(displayName) {
+    const canon = canonicalPlayerName(displayName);
+    const k = canon.trim().toLowerCase();
+    return PLAYER_CONTACT_PHONES.get(k) || "";
   }
 
   async function buildPlayersDirectoryRows(year) {
@@ -1531,9 +1599,11 @@
     }
     const out = [...byKey.values()].map((r) => {
       const email = lookupPlayerContactEmail(r.displayName);
+      const phone = lookupPlayerContactPhone(r.displayName);
       return {
         name: r.displayName,
         email,
+        phone,
         box: [...r.boxes].sort((a, b) => a.localeCompare(b)).join(", ") || "—",
         handicapDivision: null,
         handicapTeam: null,
@@ -1552,13 +1622,13 @@
     const tbody = document.getElementById("tbody-players");
     if (!tbody) return;
     const year = getYearFrom("year-players");
-    tbody.innerHTML = "<tr><td colspan=\"5\">Loading…</td></tr>";
+    tbody.innerHTML = "<tr><td colspan=\"6\">Loading…</td></tr>";
     try {
       const rows = await buildPlayersDirectoryRows(year);
       tbody.innerHTML = "";
       if (rows.length === 0) {
         tbody.innerHTML =
-          '<tr><td colspan="5" class="empty-state">No players found for this season.</td></tr>';
+          '<tr><td colspan="6" class="empty-state">No players found for this season.</td></tr>';
         return;
       }
       rows.forEach((row) => {
@@ -1566,14 +1636,19 @@
         const emailCell =
           row.email &&
           `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`;
+        const phoneDigits = String(row.phone || "").replace(/\D/g, "");
+        const phoneLabel = row.phone ? formatPhoneDisplay(row.phone) : "";
+        const phoneCell =
+          phoneDigits &&
+          `<a href="tel:+1${escapeHtml(phoneDigits)}">${escapeHtml(phoneLabel)}</a>`;
         const hcDiv = row.handicapDivision != null ? escapeHtml(row.handicapDivision) : "—";
         const hcTeam = row.handicapTeam != null ? escapeHtml(row.handicapTeam) : "—";
-        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${emailCell || "—"}</td><td>${escapeHtml(row.box)}</td><td>${hcDiv}</td><td>${hcTeam}</td>`;
+        tr.innerHTML = `<td>${escapeHtml(row.name)}</td><td>${phoneCell || "—"}</td><td>${emailCell || "—"}</td><td>${escapeHtml(row.box)}</td><td>${hcDiv}</td><td>${hcTeam}</td>`;
         tbody.appendChild(tr);
       });
     } catch (err) {
       const msg = err && err.message ? err.message : "Unable to load players.";
-      tbody.innerHTML = `<tr><td colspan="5">${escapeHtml(msg)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6">${escapeHtml(msg)}</td></tr>`;
     }
   }
 

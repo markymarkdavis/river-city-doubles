@@ -803,12 +803,14 @@ body {
   color: var(--text);
 }
 
-#panel-players .standings-table tbody td:nth-child(2) {
+#panel-players .standings-table tbody td:nth-child(2),
+#panel-players .standings-table tbody td:nth-child(3) {
   white-space: nowrap;
   font-size: 0.875rem;
 }
 
-#panel-players .standings-table tbody td:nth-child(2) a {
+#panel-players .standings-table tbody td:nth-child(2) a,
+#panel-players .standings-table tbody td:nth-child(3) a {
   color: var(--accent);
   white-space: nowrap;
 }
