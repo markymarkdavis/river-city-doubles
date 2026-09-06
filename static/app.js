@@ -360,7 +360,7 @@
       C: "Josh Wishnack",
       D: "Scott Harrison",
       E: "Rene Valdes",
-      F: "Graham Lanutti",
+      F: "Graham Lanuti",
     },
     "Grateful Dead": {
       A: "John Street",
@@ -1453,7 +1453,7 @@
     ["frank de venoge", "fxdevenoge@yahoo.com"],
     ["george stephenson", "georgeestephenson11@gmail.com"],
     ["gaby hakim", "gabriel_23225@yahoo.com"],
-    ["graham lanutti", "grahamlanuti@gmail.com"],
+    ["graham lanuti", "grahamlanuti@gmail.com"],
     ["heidi stevenson", "heidik.stevenson@gmail.com"],
     ["jack hager", "jvhager@gmail.com"],
     ["jeff clarke", "clarke_j@bellsouth.net"],
@@ -1561,7 +1561,7 @@
     ["tom mitchell", "804-539-5733"],
     ["tommy richards", "804-397-0215"],
     ["jim bonbright", "804-955-5199"],
-    ["graham lanutti", "516-717-7890"],
+    ["graham lanuti", "516-717-7890"],
     ["patrick chifunda", "443-739-9369"],
   ]);
 

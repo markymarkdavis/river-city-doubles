@@ -93,7 +93,7 @@ BOX_PLAYERS_BY_YEAR: dict[int, dict[str, dict[str, str]]] = {
             "C": "Josh Wishnack",
             "D": "Scott Harrison",
             "E": "Rene Valdes",
-            "F": "Graham Lanutti",
+            "F": "Graham Lanuti",
         },
         "Grateful Dead": {
             "A": "John Street",
