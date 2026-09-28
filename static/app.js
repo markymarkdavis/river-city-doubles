@@ -381,9 +381,9 @@
     "String Cheese Incident": {
       A: "Charles Kempe",
       B: "Ros Bowers",
-      C: "Jeff Clarke",
+      C: "Peter Thacker",
       D: "Jim Davis",
-      E: "Peter Thacker",
+      E: "Jeff Clarke",
       F: "Shelton Horsley",
     },
     Goose: {
